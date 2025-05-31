@@ -24,7 +24,7 @@ The goal of this project is to:
 
 ## Data Sources
 
-- This dashboard utilizes semester enrollment data sourced from the [Division of Management Information - UIUC](https://dmi.illinois.edu/stuenr/#race). The data sets contain demographic records of students by curriculum.
+- This dashboard utilizes semester enrollment data sourced from the [Division of Management Information (DMI) - UIUC](https://dmi.illinois.edu/stuenr/#race). The data sets contain demographic records of students by curriculum.
 
 
 ## Process 
