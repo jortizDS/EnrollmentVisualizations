@@ -8,7 +8,7 @@ The data covers enrollment from Fall 2004 to Spring 2025, with key changes over 
 
 - In Summer 2010, a new race/ethnicity classification system was adopted.
 
-- Starting in Fall 2020, data on Underrepresented Minorities (URM) was introduced.
+- In Fall 2020, data on Underrepresented Minorities (URM) was introduced.
 
 These changes are reflected in the dashboard, which supports dynamic exploration across this full time range.
 
@@ -29,22 +29,22 @@ The goal of this project is to:
 
 ## Process 
 
-1. **Data Ingestion:** Web scraping was used to automatically downloads the enrollment data in Excel format from the DMI site. 
-2. **Data Cleaning:** Data is cleaned and preprocessed to ensure accuracy and relevance. 
+1. **Data Ingestion:** Web scraping was used to automatically download the enrollment data in Excel format from the DMI site. 
+2. **Data Cleaning:**Data is cleaned and preprocessed to ensure accuracy and relevance, with formatting differences across years standardized during this process.
 3. **Dynamic Filtering**: Users can filter data by semester, college, degree, major, and concentration.
-4. **Visualizations**: Displays various plots and graphs for enrollment data across multiple dimensions.
+4. **Visualizations**: Displays various plots and graphs for enrollment data across key demographic and academic categories.
 5. **Data Summary**: Provides a textual summary of enrollment statistics, including totals and breakdowns based on selected filters.
-6. **Dashboard Development:** An interactive R shiny app is created to display the analysis results.
+6. **Dashboard Development:** An interactive R Shiny app is created to explore and visualize enrollment data.
 
 ## Technologies Used
 
 - R: Main programming language for data processing and Shiny app.
 
-- rvest: Web scraping for downloading Excel files.
+- Shiny: Framework for building the web-based application.
+
+- rvest: Used alongside httr and xml2 for web scraping and downloading Excel files.
 
 - tidyverse: Data manipulation, plotting, and summarization.
-
-- Shiny: Framework for building the web-based application.
 
 - scales: For formatting numbers with commas (e.g., 1,000 instead of 1000).
 
@@ -54,4 +54,4 @@ The goal of this project is to:
 ## Dashboard
 Access the interactive [dashboard here]()
 
-![Shiny App Interface for Exploring University of Illinois Enrollment Data](EnrollmentDashboard.gif)
+![Shiny App Interface for Exploring University of Illinois Enrollment Data](EnrollmentShiny.gif)
