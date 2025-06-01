@@ -30,7 +30,7 @@ The goal of this project is to:
 ## Process 
 
 1. **Data Ingestion:** Web scraping was used to automatically download the enrollment data in Excel format from the DMI site. 
-2. **Data Cleaning:**Data is cleaned and preprocessed to ensure accuracy and relevance, with formatting differences across years standardized during this process.
+2. **Data Cleaning:** Data is cleaned and preprocessed to ensure accuracy and relevance, with formatting differences across years standardized during this process.
 3. **Dynamic Filtering**: Users can filter data by semester, college, degree, major, and concentration.
 4. **Visualizations**: Displays various plots and graphs for enrollment data across key demographic and academic categories.
 5. **Data Summary**: Provides a textual summary of enrollment statistics, including totals and breakdowns based on selected filters.
@@ -52,6 +52,6 @@ The goal of this project is to:
 
 
 ## Dashboard
-Access the interactive [dashboard here](https://jortizds-enrollmentvisualizations.share.connect.posit.cloud/)
+Access the interactive dashboard [here](https://jortizds-enrollmentvisualizations.share.connect.posit.cloud/)
 
 ![Shiny App Interface for Exploring University of Illinois Enrollment Data](EnrollmentShiny.gif)
