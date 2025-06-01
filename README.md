@@ -2,7 +2,7 @@
 
 ## Overview
 
-This R Shiny web application provides interactive visualizations and summaries of student enrollment data at the University of Illinois Urbana-Champaign (UIUC), filtered by semester, college, degree, major, and concentration. The app helps users explore enrollment trends across demographic dimensions such as race/ethnicity, sex, and residency.
+This [R Shiny web application](https://jortizds-enrollmentvisualizations.share.connect.posit.cloud/) provides interactive visualizations and summaries of student enrollment data at the University of Illinois Urbana-Champaign (UIUC), filtered by semester, college, degree, major, and concentration. The app helps users explore enrollment trends across demographic dimensions such as race/ethnicity, sex, and residency.
 
 The data covers enrollment from Fall 2004 to Spring 2025, with key changes over time:
 
