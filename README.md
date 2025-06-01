@@ -52,6 +52,6 @@ The goal of this project is to:
 
 
 ## Dashboard
-Access the interactive [dashboard here]()
+Access the interactive [dashboard here](https://jortizds-enrollmentvisualizations.share.connect.posit.cloud/)
 
 ![Shiny App Interface for Exploring University of Illinois Enrollment Data](EnrollmentShiny.gif)
