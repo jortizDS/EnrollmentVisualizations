@@ -1,9 +1,5 @@
 # UIUC Enrollment Visualization App
 
-## Project Background 
-As a woman in STEM, I often found myself reflecting on the changing makeup of my learning environments. I began my academic journey at an Elementary school on the Southwest side of Chicago, where 99% of students are underprivileged and Hispanic, and later attended Whitney Young, one of the most diverse high schools in the city. The shift to a predominantly white institution (PWI) like UIUC, and the noticeable lack of cultural, ethnic, and gender representation within my major—made me reflect on how diversity can look very different across academic spaces. That experience led me here. My goal was to turn personal curiosity into a resource that could help others better understand representation across departments.
-
-
 ## Overview
 
 This [R Shiny web application](https://jortizds-enrollmentvisualizations.share.connect.posit.cloud/) provides interactive visualizations and summaries of student enrollment data at the University of Illinois Urbana-Champaign (UIUC), filtered by semester, college, degree, major, and concentration. The app helps users explore enrollment trends across demographic dimensions such as race/ethnicity, sex, and residency.
@@ -59,3 +55,6 @@ The goal of this project is to:
 Access the interactive dashboard [here](https://jortizds-enrollmentvisualizations.share.connect.posit.cloud/)
 
 ![Shiny App Interface for Exploring University of Illinois Enrollment Data](EnrollmentShiny.gif)
+
+## Project Background 
+As a woman in STEM, I often found myself reflecting on the changing makeup of my learning environments. I began my academic journey at an Elementary school on the Southwest side of Chicago, where 99% of students are underprivileged and Hispanic, and later attended Whitney Young, one of the most diverse high schools in the city. The shift to a predominantly white institution (PWI) like UIUC, and the noticeable lack of cultural, ethnic, and gender representation within my major—made me reflect on how diversity can look very different across academic spaces. That experience led me here. My goal was to turn personal curiosity into a resource that could help others better understand representation across departments.
