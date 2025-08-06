@@ -181,7 +181,13 @@ server <- function(input, output, session) {
     }
     
     # Read the data
-    readRDS(filepath)
+    semester_df = readRDS(filepath)
+    
+    level_abb = c("Undergraduate" = "Undergraduate","Graduate" = "Graduate","Professional"="Nondegree")
+    semester_df$programtype <- ifelse(semester_df$`Major Name` %in% names(level_abb), level_abb[semester_df$`Major Name`], semester_df$programtype)
+    semester_df$Degree <- ifelse(semester_df$`Major Name` %in% names(level_abb), level_abb[semester_df$`Major Name`], semester_df$Degree)
+    
+    semester_df
   })
   
   # Updata Selectize choices ---------------------
@@ -237,7 +243,7 @@ server <- function(input, output, session) {
     updateSelectInput(session,
                       inputId = "college",
                       choices = college_choices,
-                      selected = NULL)
+                      selected = "")
   })
 
   ## Update major choices
@@ -260,7 +266,7 @@ server <- function(input, output, session) {
     updateSelectInput(session,
                       inputId = "major",
                       choices = major_choices,
-                      selected = NULL)
+                      selected = "")
   })
   
   
@@ -353,10 +359,12 @@ server <- function(input, output, session) {
     if (input$college == "" & input$level == "") {
       final <- filtered_df[filtered_df$`Major Name` == "Campus total", ]
       
-    } else if ((input$college != "") & (input$level == "")) { 
-      # case 2 - college total
-      final <- filtered_df[grepl("College total", filtered_df$`Concentration Name (if any)`), ] %>%
-        filter(Coll %in% c(input$college))
+    } else if ((input$college == "") & (input$level != "")) { 
+      # case 2 - degree total
+      final <- filtered_df %>%
+        filter(`Major Name` %in% c("Undergraduate"="Undergraduate", "Graduate"="Graduate","Professional"="Nondegree")) %>%
+        filter(`Major Name` == input$level) %>%
+        ungroup()
       
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
       # case NEW - college and degree type total
@@ -416,10 +424,10 @@ server <- function(input, output, session) {
         select(Degree, programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`)  
       
-    } else if ((input$college != "") & (input$level == "")) { 
-      # case 2 - college total
+    } else if ((input$college == "") & (input$level != "")) { 
+      # case 2 - degree total
       sex_df = data %>%
-        select(Degree, programtype, `Concentration Name (if any)`, Total, Men, Women, `Sex Unknown`) %>%
+        select(`Major Name`,Degree, Total, Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`) 
       
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
@@ -481,12 +489,12 @@ server <- function(input, output, session) {
                # "Multiracial", "International", "Race Unknown") %>%
         rename(Unknown = `Race Unknown`)  
       
-    } else if ((input$college != "") & (input$level == "")) { 
-      # case 2 - college total
+    } else if ((input$college == "") & (input$level != "")) { 
+      # case 2 - degree total
       race_df = data %>%
         #select(everything()) %>%
         ungroup() %>%
-        select("Degree", "programtype", "Concentration Name (if any)", "Total", "Caucasian":"Race Unknown") %>%
+        select(`Major Name`,Degree, "Total", "Caucasian":"Race Unknown") %>%
                #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
         rename(Unknown = `Race Unknown`) 
       
@@ -554,10 +562,10 @@ server <- function(input, output, session) {
       residency_df = data %>%
         select(Degree, programtype, `Major Name`, Total, "Illinois", "Non-Illinois") 
       
-    } else if ((input$college != "") & (input$level == "")) { 
-      # case 2 - college total
+    } else if ((input$college == "") & (input$level != "")) { 
+      # case 2 - degree total
       residency_df = data %>%
-        select(Degree, programtype, `Concentration Name (if any)`, Total, "Illinois", "Non-Illinois")
+        select(`Major Name`,Degree, Total, "Illinois", "Non-Illinois")
       
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
       # case NEW - college and degree type total
@@ -604,7 +612,13 @@ server <- function(input, output, session) {
     # Ensure data is not empty and "URM" column exists
     req(nrow(data) > 0, "URM" %in% colnames(data))
     
-    if ("Concentration Name (if any)" %in% colnames(data)) {
+    if (((input$college == "") & (input$level != ""))) {
+      URM_df = data %>%
+        select(`Major Name`,Degree, Total, URM) %>%
+        mutate(`Not URM` = Total - URM) %>%
+        pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
+      
+    } else if ("Concentration Name (if any)" %in% colnames(data)) {
       URM_df = data %>%
         select(programtype, Degree,`Major Name`, `Concentration Name (if any)`, Total, URM) %>%
         mutate(`Not URM` = Total - URM) %>%
@@ -667,9 +681,9 @@ server <- function(input, output, session) {
     }  else if (nrow(data) == 0){
       return("")
       
-    } else if (input$college != "" & input$level == "") {
-      # Case 2 - college total
-      text <- paste0(firstsentence, " students enrolled in the college of ", names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+    } else if ((input$college == "") & (input$level != "")) {
+      # Case 2 - degree total
+      text <- paste(firstsentence, "students enrolled in an", input$level, "program.")
     
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) {
       # Case NEWWWW - major without concentration total
