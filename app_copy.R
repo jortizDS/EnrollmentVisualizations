@@ -47,7 +47,10 @@ ui <- fluidPage(
                                   choices = NULL)),
                                  #   c("Fall", "Spring", "Summer"), selected = "Spring"))
              ),
-             
+             conditionalPanel(
+               condition = "input.level == ''",
+               checkboxInput('levelYN', label = "View Campus Enrollment by Degree level", value = FALSE, width = NULL)
+             ),
              selectizeInput('level', 
                             label = HTML("2. Filter by Degree Level <span title='After selecting degree level and major, if more than one degree \nis available you will have the choice to filter by Degree type'>⍰</span>"), 
                             choices = c("Show all degree levels" = "", c("Undergraduate", "Graduate", "Nondegree"), selected = "Undergraduate")),
@@ -115,6 +118,7 @@ server <- function(input, output, session) {
     
     updateSelectInput(session, "degree", selected = "")
     updateSelectInput(session, "college", selected = "")
+    updateSelectInput(session, "levelYN", selected = "")
     updateSelectInput(session, "level", selected = "")
     updateSelectInput(session, "major", selected = "")
     updateSelectInput(session, "conc", selected = "")
@@ -357,7 +361,15 @@ server <- function(input, output, session) {
     
     # case 1 - campus total
     if (input$college == "" & input$level == "") {
-      final <- filtered_df[filtered_df$`Major Name` == "Campus total", ]
+      if (input$levelYN) {
+        final = filtered_df %>%
+            filter(`Major Name` %in% c("Undergraduate"="Undergraduate", "Graduate"="Graduate","Professional"="Nondegree")) %>% 
+            group_by(Degree,  programtype, `Major Name`) %>%
+            summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
+        } else {
+          final = filtered_df %>%
+            filter(`Major Name` %in% c("Campus total"))
+        }
       
     } else if ((input$college == "") & (input$level != "")) { 
       # case 2 - degree total
