@@ -187,9 +187,14 @@ server <- function(input, output, session) {
     # Read the data
     semester_df = readRDS(filepath)
     
+    # update 
+    #semester_df[grepl("Professional", semester_df$`Major Name`), 'Major Name'] <- ""
+    
     level_abb = c("Undergraduate" = "Undergraduate","Graduate" = "Graduate","Professional"="Nondegree")
     semester_df$programtype <- ifelse(semester_df$`Major Name` %in% names(level_abb), level_abb[semester_df$`Major Name`], semester_df$programtype)
     semester_df$Degree <- ifelse(semester_df$`Major Name` %in% names(level_abb), level_abb[semester_df$`Major Name`], semester_df$Degree)
+    
+    
     
     semester_df
   })
@@ -223,16 +228,17 @@ server <- function(input, output, session) {
     # Ensure inputs are available
     req(input$level)  
     
-    college_names_df <- df %>% #enrollment_data() %>%
+    college_names_df <- enrollment_data() %>%
       filter(Degree == "College total")
     
     coll_names_vec <- setNames(college_names_df$`Major Name`, college_names_df$Coll)
     
-    colleges_df <- df %>% #enrollment_data() %>%
-      filter(programtype == "Undergraduate") %>% #input$level) %>%
+    colleges_df <- enrollment_data() %>%
+      filter(programtype == input$level) %>%
       filter(Degree != "College total") %>%
       group_by(Coll) %>%
-      summarise(across(where(is.numeric), sum, na.rm = TRUE))
+      summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+      ungroup()
     
     # ex <- unique(iris$Species)
     # names(ex) <- month.abb[1:3]
@@ -363,7 +369,8 @@ server <- function(input, output, session) {
     if (input$college == "" & input$level == "") {
       if (input$levelYN) {
         final = filtered_df %>%
-            filter(`Major Name` %in% c("Undergraduate"="Undergraduate", "Graduate"="Graduate","Professional"="Nondegree")) %>% 
+            filter(`Major Name` %in% c("Undergraduate", "Graduate","Professional")) %>% 
+              #"Undergraduate"="Undergraduate", "Graduate"="Graduate","Professional"="Nondegree")) %>% 
             group_by(Degree,  programtype, `Major Name`) %>%
             summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
         } else {
@@ -374,8 +381,8 @@ server <- function(input, output, session) {
     } else if ((input$college == "") & (input$level != "")) { 
       # case 2 - degree total
       final <- filtered_df %>%
-        filter(`Major Name` %in% c("Undergraduate"="Undergraduate", "Graduate"="Graduate","Professional"="Nondegree")) %>%
-        filter(`Major Name` == input$level) %>%
+        filter(`Major Name` %in% c("Undergraduate", "Graduate","Professional")) %>%
+        filter(`Major Name` == ifelse(input$level == "Nondegree", "Professional", input$level)) %>%
         ungroup()
       
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
@@ -689,13 +696,24 @@ server <- function(input, output, session) {
     firstsentence <- paste0("During the ", input$semester," ", input$year, " semester, there were <b>", scales::comma(total), "</b>")
     if (input$college == "" & input$level == "") {
       # Case 1 - campus total
-      text <- paste(firstsentence, " students enrolled in the University of Illinois at Urbana-Champaign campus.")
+      if (input$levelYN) { 
+        # by program type
+        data_ord = arrange(data, desc(Total))
+        text <- paste(firstsentence, paste(c(paste0(". There were ", data_ord[1, "Total"], " students enrolled in a ", data_ord[1, "Major Name"], " program"), 
+                                       paste(sapply(2:nrow(data_ord), function(x) paste0(data_ord[x, "Total"], " students enrolled in a ",
+                                                                                         data_ord[x, "Major Name"], " program.")), collapse = ", and ")), collapse = ", "))
+      } else {
+        text <- paste(firstsentence, " students enrolled in the University of Illinois at Urbana-Champaign campus.")
+      }
+      
     }  else if (nrow(data) == 0){
       return("")
       
     } else if ((input$college == "") & (input$level != "")) {
       # Case 2 - degree total
       text <- paste(firstsentence, "students enrolled in an", input$level, "program.")
+
+     
     
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) {
       # Case NEWWWW - major without concentration total
