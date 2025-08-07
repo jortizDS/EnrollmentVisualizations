@@ -138,14 +138,36 @@ server <- function(input, output, session) {
                  plotOutput("raceplot", height = "40vh"),
                  type = 1, color = "#007bff", size = 0.5)
         ),
-        column(4,
-               h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
-               shinycssloaders::withSpinner(
-                 plotOutput("URM_plot", height = "32vh"),
-                 type = 1, color = "#007bff", size = 0.5
-               )
-        )
-      )
+        column(
+          4,
+          h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
+          div(
+            style = "height: 400px; overflow-y: auto;",
+            shinycssloaders::withSpinner(
+              plotOutput("URM_plot", height = "400px"),
+              type = 1, color = "#007bff", size = 0.5
+            )
+          )
+        ))
+        # column(
+        #   4,
+        #   h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
+        #   div(
+        #     style = "height: 32vh; overflow-y: auto;",
+        #     shinycssloaders::withSpinner(
+        #       plotOutput("URM_plot", height = "auto"),
+        #       type = 1, color = "#007bff", size = 0.5
+        #     )
+        #   )
+        # ))
+      #   column(4,
+      #          h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
+      #          shinycssloaders::withSpinner(
+      #            plotOutput("URM_plot", height = "32vh"),
+      #            type = 1, color = "#007bff", size = 0.5
+      #          )
+      #   )
+      # )
     } else {
       # Only show race plot full width
       fluidRow(
@@ -473,21 +495,21 @@ server <- function(input, output, session) {
  
     sex_df %>%
       tidyr::pivot_longer(c(Men, Women, Unknown), names_to = "sex", values_to = "total") %>%
-      mutate(perc = round(100*total/Total, 2)) %>%
+      mutate(perc = round(100*total/Total, 1)) %>%
       mutate(sex = factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown"))) %>%
       ggplot(aes(x=Degree, y=perc, fill=factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown")))) +
       geom_col() +
-      facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
+      #facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
       theme_minimal() +
       theme(
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
+        axis.title.x = element_blank()#,
+        #axis.text.x = element_blank(),
+        #axis.ticks.x = element_blank()
       ) +
       labs(y = "Percentage",
            fill = "Sex") + 
       scale_x_discrete(drop = TRUE) +
-      geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5)) +
+      geom_text(aes(label = ifelse(perc > 1.0, paste0(perc, "%"), "")), position = position_stack(vjust=0.5)) +
       scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
                                    "Women" = "#FF69B4",  # Pink
                                    "Unknown" = "#B0B0B0"))  # Grey
@@ -549,24 +571,49 @@ server <- function(input, output, session) {
     }
     
     pivot_cols <- race_df %>% 
-      select(where(is.numeric))  %>% #select("Caucasian":"Unknown") %>% colnames(.)
-      colnames(.)
-    pivot_cols <- setdiff(pivot_cols, "Total")
-    
-    race_df %>%
-      ungroup() %>%
-      tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>% 
-        #c("Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Unknown"),
-      mutate(perc = round(100*total/Total, 2)) %>%
-    ggplot(aes(x = reorder(race,-total), y=total, fill = race)) +
-      geom_bar(stat="identity") +
+        select(where(is.numeric))  %>% #select("Caucasian":"Unknown") %>% colnames(.)
+        colnames(.)
+      pivot_cols <- setdiff(pivot_cols, "Total")
+
+      race_df %>%
+        ungroup() %>%
+        tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>%
+      mutate(perc = round(100*total/Total, 1)) %>%
+      ggplot(aes(y=Degree, x=perc, fill=factor(race))) +
+      geom_col() +
       theme_minimal() +
-      guides(x =  guide_axis(angle = 45)) +
-      theme(legend.position = "none") +
-      geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), size=3) +
-      facet_wrap(~ Degree, scales = "free_y") +
-      labs(x = "Race",
-           y = "Total")
+      theme(axis.title.y = element_blank()) +
+      labs(x = "Total",
+           fill = "Race") + 
+      scale_y_discrete(drop = TRUE) +
+        geom_text(
+          aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
+          position = position_stack(vjust = 0.5),
+          hjust = 0.5,
+          color = "black"
+        ) +
+      scale_fill_manual(values = setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE)))  
+    
+      
+    # pivot_cols <- race_df %>% 
+    #   select(where(is.numeric))  %>% #select("Caucasian":"Unknown") %>% colnames(.)
+    #   colnames(.)
+    # pivot_cols <- setdiff(pivot_cols, "Total")
+    # 
+    # race_df %>%
+    #   ungroup() %>%
+    #   tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>% 
+    #     #c("Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Unknown"),
+    #   mutate(perc = round(100*total/Total, 2)) %>%
+    # ggplot(aes(x = reorder(race,-total), y=total, fill = race)) +
+    #   geom_bar(stat="identity") +
+    #   theme_minimal() +
+    #   guides(x =  guide_axis(angle = 45)) +
+    #   theme(legend.position = "none") +
+    #   geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), size=3) +
+    #   facet_wrap(~ Degree, scales = "free_y") +
+    #   labs(x = "Race",
+    #        y = "Total")
     
   })
   
@@ -606,20 +653,20 @@ server <- function(input, output, session) {
 
     residency_df %>%
       tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
-      mutate(perc = round(100*total/Total, 2)) %>%
+      mutate(perc = round(100*total/Total, 1)) %>%
     ggplot(aes(x=Degree, y=perc, fill=factor(residency))) +
       geom_col() +
-      facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
+     # facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
       theme_minimal() +
       theme(
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
+        axis.title.x = element_blank()#,
+       # axis.text.x = element_blank(),
+      #  axis.ticks.x = element_blank()
       ) +
       labs(y = "Percentage",
            fill = "Residency") + 
       scale_x_discrete(drop = TRUE) +
-      facet_wrap(~Degree) +
+      #facet_wrap(~Degree) +
       geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), color = "white") +
       scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
                                    "Non-Illinois" = "#13294B"))  # Blue
@@ -675,14 +722,14 @@ server <- function(input, output, session) {
       ggplot(df, aes(x = "", y = total, fill = group)) +
         geom_col(width = 1) +
         coord_polar(theta = "y") +
-        geom_text(aes(label = label), 
+        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), 
                   position = position_stack(vjust = 0.5),
                   hjust = 0.1,     # <-- nudges labels to the right
                   size = 4, color = "black") +
         theme_void() +
         
         labs(title = unique(df$Degree)) +
-        scale_fill_manual("", values = c("purple", "yellow"))
+        scale_fill_manual("", values = c("mediumpurple", "lightgreen"))
     })
     
     # Step 3: Arrange plots
