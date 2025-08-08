@@ -47,13 +47,15 @@ ui <- fluidPage(
                                   choices = NULL)),
                                  #   c("Fall", "Spring", "Summer"), selected = "Spring"))
              ),
-             conditionalPanel(
-               condition = "input.level == ''",
-               checkboxInput('levelYN', label = "View Campus Enrollment by Degree level", value = FALSE, width = NULL)
-             ),
+             checkboxInput('levelYN', label = "View Campus Enrollment by Degree level", value = FALSE, width = NULL),
+             # conditionalPanel(
+             #   condition = "input.level == ''",
+             #   checkboxInput('levelYN', label = "View Campus Enrollment by Degree level", value = FALSE, width = NULL)
+             # ),
              selectizeInput('level', 
                             label = HTML("2. Filter by Degree Level <span title='After selecting degree level and major, if more than one degree \nis available you will have the choice to filter by Degree type'>⍰</span>"), 
-                            choices = c("Show all degree levels" = "", c("Undergraduate", "Graduate", "Nondegree"), selected = "Undergraduate")),
+                            choices = c("Show all degree levels" = "", c("Undergraduate", "Graduate", "Nondegree")),
+                            selected = ""),
              selectizeInput('college', "1. Filter by College", choices = c("Show all colleges" = "")),
              selectizeInput('major', "3. Filter by Major", choices = c("Show all majors" = "")),
              uiOutput("degree_type_ui"),  # placeholder for conditional dropdown
@@ -118,10 +120,11 @@ server <- function(input, output, session) {
     
     updateSelectInput(session, "degree", selected = "")
     updateSelectInput(session, "college", selected = "")
-    updateSelectInput(session, "levelYN", selected = "")
+    #updateSelectInput(session, "levelYN", selected = "")
     updateSelectInput(session, "level", selected = "")
     updateSelectInput(session, "major", selected = "")
     updateSelectInput(session, "conc", selected = "")
+    updateCheckboxInput(session, "levelYN", value = FALSE)
   })
   
   output$race_urm_ui <- renderUI({
@@ -381,6 +384,38 @@ server <- function(input, output, session) {
     )
   })
   
+  # observeEvent(input$level, {
+  #   if (input$levelYN && input$level != "") {
+  #     updateCheckboxInput(session, "levelYN", value = FALSE)
+  #   }
+  # })
+  
+  
+  prevLevel    <- reactiveVal("")
+  prevCheckbox <- reactiveVal(FALSE)
+
+  observeEvent(list(input$level, input$levelYN), {
+    lvl    <- input$level
+    chk    <- input$levelYN
+    oldLvl <- prevLevel()
+    oldChk <- prevCheckbox()
+
+    # 1) If the user just went from non-empty -> empty checkbox, clear the level
+    
+    if (oldLvl == "" && lvl != "" && chk) {
+      updateCheckboxInput(session, "levelYN", value = FALSE)
+    } else if (chk && lvl != "") {
+       updateSelectizeInput(session, "level", selected = "")
+    }
+    # # 2) Else if they went from no-level -> level *while* box was checked, uncheck it
+    # else if (oldLvl == "" && lvl != "" && chk) {
+    #   updateCheckboxInput(session, "levelYN", value = FALSE)
+    # }
+
+    prevLevel(lvl)
+    prevCheckbox(chk)
+  }, ignoreInit = TRUE)
+
 
   final_data <- reactive({
     
@@ -429,6 +464,15 @@ server <- function(input, output, session) {
     else {
       final <- filtered_df[0,] #df[df$Coll %in% c(input$college), ]
     }
+    
+    # # check level YN
+    # if (input$levelYN) {
+    #   final = filtered_df %>%
+    #     filter(`Major Name` %in% c("Undergraduate", "Graduate","Professional")) %>% 
+    #     #"Undergraduate"="Undergraduate", "Graduate"="Graduate","Professional"="Nondegree")) %>% 
+    #     group_by(Degree,  programtype, `Major Name`) %>%
+    #     summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") 
+    # }
     
     if (!is.null(input$degree) && input$degree != "") {
       final <- final %>% filter(Degree == input$degree)
@@ -491,6 +535,12 @@ server <- function(input, output, session) {
     } else {
       sex_df <- NULL
     }
+    
+    # if (input$levelYN) {
+    #   sex_df = data %>%
+    #     select(Degree, programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`) 
+    # }
     
  
     sex_df %>%
