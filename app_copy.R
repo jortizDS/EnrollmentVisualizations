@@ -432,6 +432,31 @@ server <- function(input, output, session) {
     prevCheckbox(chk)
   }, ignoreInit = TRUE)
 
+  prevColl    <- reactiveVal("")
+  
+  observeEvent(list(input$college, input$collegeYN), {
+    col    <- input$college
+    col_chk    <- input$collegeYN
+    oldCol <- prevColl()
+    
+    # 1) If the user just went from non-empty -> empty checkbox, clear the level
+    if (oldCol == "" & col != "" & col_chk) {
+      updateCheckboxInput(session, "collegeYN", value = FALSE)
+    } else if (col_chk & (col != "")) {
+      updateSelectizeInput(session, "college", selected = "")
+      updateSelectizeInput(session, "major", selected = "")
+      updateSelectizeInput(session, "degree", selected = "")
+      updateSelectizeInput(session, "conc", selected = "")
+      
+    } else if (col_chk) {
+      updateSelectizeInput(session, "major", choices =  c("Show all majors" = ""), selected = "")
+      updateSelectizeInput(session, "degree", choices =  c("Choose a degree type" = ""), selected = "")
+      updateSelectizeInput(session, "conc", choices =  c("Show all concentrations" = ""), selected = "")
+    }
+    
+    
+    prevColl(col)
+  }, ignoreInit = TRUE)
 
   final_data <- reactive({
     
