@@ -242,8 +242,7 @@ server <- function(input, output, session) {
                         selected = "Spring")
     } else {
       updateSelectInput(session, "semester", 
-                        choices = c("Fall", "Spring", "Summer"), 
-                        selected = "Fall")
+                        choices = c("Fall", "Spring", "Summer"), selected = input$semester)
     }
   })
   
@@ -274,11 +273,24 @@ server <- function(input, output, session) {
     # Extract majors safely as a vector
     # college_choices <- c("Show all majors" = "", as.vector(filtered_colleges))
     
-    # Update the select input
     updateSelectInput(session,
                       inputId = "college",
                       choices = college_choices,
                       selected = "")
+    
+    # # Update the select input
+    # if (input$levelYN != TRUE) {
+    #   updateSelectInput(session,
+    #                     inputId = "college",
+    #                     choices = college_choices,
+    #                     selected = "")
+    # } else {
+    #   updateSelectInput(session,
+    #                     inputId = "college",
+    #                     choices = c("Show all colleges" = ""),
+    #                     selected = "")
+    # } 
+
   })
 
   ## Update major choices
@@ -400,13 +412,25 @@ server <- function(input, output, session) {
     oldLvl <- prevLevel()
     oldChk <- prevCheckbox()
 
-    # 1) If the user just went from non-empty -> empty checkbox, clear the level
     
-    if (oldLvl == "" && lvl != "" && chk) {
+    
+    # 1) If the user just went from non-empty -> empty checkbox, clear the level
+    if (oldLvl == "" & lvl != "" & chk) {
       updateCheckboxInput(session, "levelYN", value = FALSE)
-    } else if (chk && lvl != "") {
+    } else if (chk & (lvl != "")) {
        updateSelectizeInput(session, "level", selected = "")
+      updateSelectizeInput(session, "college", selected = "")
+      updateSelectizeInput(session, "major", selected = "")
+      updateSelectizeInput(session, "degree", selected = "")
+      updateSelectizeInput(session, "conc", selected = "")
+    
     }
+    
+    # if (chk & (input$college == "")) {
+    #   updateSelectizeInput(session, "college", c("Show all concentrations" = ""))
+    # }
+    
+    
     # # 2) Else if they went from no-level -> level *while* box was checked, uncheck it
     # else if (oldLvl == "" && lvl != "" && chk) {
     #   updateCheckboxInput(session, "levelYN", value = FALSE)
