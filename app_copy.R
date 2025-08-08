@@ -133,12 +133,13 @@ server <- function(input, output, session) {
     updateSelectInput(session, "conc", selected = "")
     updateCheckboxInput(session, "levelYN", value = FALSE)
   })
+
   
   output$race_urm_ui <- renderUI({
     # Get filtered data
     data <- final_data()
     req(nrow(data) > 0)
-
+    
     if ((input$year == 2020 & input$semester == "Fall") | input$year > 2020) {
       # Show race and URM side-by-side
       fluidRow(
@@ -148,36 +149,14 @@ server <- function(input, output, session) {
                  plotOutput("raceplot", height = "40vh"),
                  type = 1, color = "#007bff", size = 0.5)
         ),
-        column(
-          4,
-          h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
-          div(
-            style = "height: 400px; overflow-y: auto;",
-            shinycssloaders::withSpinner(
-              plotOutput("URM_plot", height = "400px"),
-              type = 1, color = "#007bff", size = 0.5
-            )
-          )
-        ))
-        # column(
-        #   4,
-        #   h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
-        #   div(
-        #     style = "height: 32vh; overflow-y: auto;",
-        #     shinycssloaders::withSpinner(
-        #       plotOutput("URM_plot", height = "auto"),
-        #       type = 1, color = "#007bff", size = 0.5
-        #     )
-        #   )
-        # ))
-      #   column(4,
-      #          h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
-      #          shinycssloaders::withSpinner(
-      #            plotOutput("URM_plot", height = "32vh"),
-      #            type = 1, color = "#007bff", size = 0.5
-      #          )
-      #   )
-      # )
+        column(4,
+               h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
+               shinycssloaders::withSpinner(
+                 plotOutput("URM_plot", height = "32vh"),
+                 type = 1, color = "#007bff", size = 0.5
+               )
+        )
+      )
     } else {
       # Only show race plot full width
       fluidRow(
@@ -430,6 +409,7 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "major", selected = "")
       updateSelectizeInput(session, "degree", selected = "")
       updateSelectizeInput(session, "conc", selected = "")
+      updateCheckboxInput(session, "collegeYN", value = FALSE)
     
     } else if (chk) {
       updateSelectizeInput(session, "college", choices =  c("Show all colleges" = ""), selected = "")
@@ -826,7 +806,7 @@ server <- function(input, output, session) {
              fill = "Residency") + 
         scale_x_discrete(drop = TRUE) +
         #facet_wrap(~Degree) +
-        geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), color = "white") +
+        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), position = position_stack(vjust=0.5), color = "black") +
         scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
                                      "Non-Illinois" = "#13294B"))  # Blue
     } else {
@@ -846,7 +826,7 @@ server <- function(input, output, session) {
              fill = "Residency") + 
         scale_x_discrete(drop = TRUE) +
         #facet_wrap(~Degree) +
-        geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), color = "white") +
+        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), position = position_stack(vjust=0.5), color = "black") +
         scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
                                      "Non-Illinois" = "#13294B"))  # Blue
     }
@@ -896,34 +876,57 @@ server <- function(input, output, session) {
     URM_df = data %>%
       select(CollName, Total, URM) %>%
       mutate(`Not URM` = Total - URM) %>%
-      pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
-    
-    # Step 1: Add percentage column to each subset
-    URM_df <- URM_df %>%
-      group_by(CollName) %>%
-      mutate(perc = total / sum(total) * 100,
-             label = paste0(round(perc, 1), "%")) %>%
+      pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total") %>%
       ungroup()
     
-    # Step 2: Create pie charts with percentage labels
-    degree_list <- split(URM_df, URM_df$CollName)
+    urm_length <- nrow(URM_df)
+    if (urm_length > 4) {
+      
+      URM_df %>%
+        mutate(perc = round(100*total/Total, 1)) %>%
+        ggplot(aes(x=CollName, y=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
+        geom_col() +
+        theme_minimal() +
+        theme(axis.title.x = element_blank()) +
+        labs(y = "Percentage",
+             fill = "group") + 
+        scale_x_discrete(drop = TRUE) +
+        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 0), "%"), "")), position = position_stack(vjust=0.9), color = "black") +
+        scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) +
+        guides(x =  guide_axis(angle = -90)) 
+      
+      # BOOKMARK JAQUELINE
+      
+    } else {
+      # Step 1: Add percentage column to each subset
+      URM_df <- URM_df %>%
+        group_by(CollName) %>%
+        mutate(perc = total / sum(total) * 100,
+               label = paste0(round(perc, 1), "%")) %>%
+        ungroup()
+      
+      # Step 2: Create pie charts with percentage labels
+      degree_list <- split(URM_df, URM_df$CollName)
+      
+      plot_list <- lapply(degree_list, function(df) {
+        ggplot(df, aes(x = "", y = total, fill = group)) +
+          geom_col(width = 1) +
+          coord_polar(theta = "y") +
+          geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), 
+                    position = position_stack(vjust = 0.5),
+                    hjust = 0.1,     # <-- nudges labels to the right
+                    size = 4, color = "black") +
+          theme_void() +
+          
+          labs(title = unique(df$CollName)) +
+          scale_fill_manual("", values = c("mediumpurple", "lightgreen"))
+      })
+      
+      # Step 3: Arrange plots
+      grid.arrange(grobs = plot_list, ncol = ifelse(length(plot_list) == 1, 1, 2))
+    }
     
-    plot_list <- lapply(degree_list, function(df) {
-      ggplot(df, aes(x = "", y = total, fill = group)) +
-        geom_col(width = 1) +
-        coord_polar(theta = "y") +
-        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), 
-                  position = position_stack(vjust = 0.5),
-                  hjust = 0.1,     # <-- nudges labels to the right
-                  size = 4, color = "black") +
-        theme_void() +
-        
-        labs(title = unique(df$CollName)) +
-        scale_fill_manual("", values = c("mediumpurple", "lightgreen"))
-    })
     
-    # Step 3: Arrange plots
-    grid.arrange(grobs = plot_list, ncol = ifelse(length(plot_list) == 1, 1,2 ))
     
   } else {
     # Step 1: Add percentage column to each subset
@@ -947,7 +950,7 @@ server <- function(input, output, session) {
         theme_void() +
         
         labs(title = unique(df$Degree)) +
-        scale_fill_manual("", values = c("mediumpurple", "lightgreen"))
+        scale_fill_manual("", values = rev(c("mediumpurple", "lightgreen")))
     })
     
     # Step 3: Arrange plots
