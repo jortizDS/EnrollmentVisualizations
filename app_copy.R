@@ -859,6 +859,7 @@ server <- function(input, output, session) {
     # Ensure data is not empty and "URM" column exists
     req(nrow(data) > 0, "URM" %in% colnames(data))
     
+  if (!input$collegeYN) {
     if (((input$college == "") & (input$level != ""))) {
       URM_df = data %>%
         select(`Major Name`,Degree, Total, URM) %>%
@@ -883,12 +884,48 @@ server <- function(input, output, session) {
         pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
     } else {
       URM_df = data %>%
+        #ungroup
         select(programtype, Degree, `Major Name`, Total, URM) %>%
         mutate(`Not URM` = Total - URM) %>%
         pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
     }
+  }
     
     # Create pie chart
+  if (input$collegeYN) {
+    URM_df = data %>%
+      select(CollName, Total, URM) %>%
+      mutate(`Not URM` = Total - URM) %>%
+      pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
+    
+    # Step 1: Add percentage column to each subset
+    URM_df <- URM_df %>%
+      group_by(CollName) %>%
+      mutate(perc = total / sum(total) * 100,
+             label = paste0(round(perc, 1), "%")) %>%
+      ungroup()
+    
+    # Step 2: Create pie charts with percentage labels
+    degree_list <- split(URM_df, URM_df$CollName)
+    
+    plot_list <- lapply(degree_list, function(df) {
+      ggplot(df, aes(x = "", y = total, fill = group)) +
+        geom_col(width = 1) +
+        coord_polar(theta = "y") +
+        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), 
+                  position = position_stack(vjust = 0.5),
+                  hjust = 0.1,     # <-- nudges labels to the right
+                  size = 4, color = "black") +
+        theme_void() +
+        
+        labs(title = unique(df$CollName)) +
+        scale_fill_manual("", values = c("mediumpurple", "lightgreen"))
+    })
+    
+    # Step 3: Arrange plots
+    grid.arrange(grobs = plot_list, ncol = ifelse(length(plot_list) == 1, 1,2 ))
+    
+  } else {
     # Step 1: Add percentage column to each subset
     URM_df <- URM_df %>%
       group_by(Degree) %>%
@@ -915,6 +952,9 @@ server <- function(input, output, session) {
     
     # Step 3: Arrange plots
     grid.arrange(grobs = plot_list, ncol = ifelse(length(plot_list) == 1, 1,2 ))
+  }
+    
+    
   })
   
   output$summary_text <- renderUI({
