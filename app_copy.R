@@ -21,6 +21,12 @@ colleges_df <- df %>%
   filter(Degree == "College total")
 
 colleges_vec <- setNames(colleges_df$Coll, colleges_df$`Major Name`)
+
+college_abb_newest = list(KL="ACES", KM="Gies", KN ="Education", KP="Grainger", KR="FAA", KS = "Graduate", KT = "Media", KU = "Law", 
+     KV = "LAS", KW = "DGS", KY="AHS", LC="Vet Med", LG="LER", LL="Social Work", LN="CITL", LP="iSchool", LT="Carle Illinois", NB = "Provost")
+
+
+
 # code ----
 ui <- fluidPage(
   titlePanel("UIUC Enrollment Explorer"),
@@ -56,6 +62,7 @@ ui <- fluidPage(
                             label = HTML("2. Filter by Degree Level <span title='After selecting degree level and major, if more than one degree \nis available you will have the choice to filter by Degree type'>⍰</span>"), 
                             choices = c("Show all degree levels" = "", c("Undergraduate", "Graduate", "Nondegree")),
                             selected = ""),
+             checkboxInput('collegeYN', label = "View Degree level by college", value = FALSE, width = NULL),
              selectizeInput('college', "1. Filter by College", choices = c("Show all colleges" = "")),
              selectizeInput('major', "3. Filter by Major", choices = c("Show all majors" = "")),
              uiOutput("degree_type_ui"),  # placeholder for conditional dropdown
@@ -470,7 +477,7 @@ server <- function(input, output, session) {
         filter(`Major Name` %in% c("Undergraduate", "Graduate","Professional")) %>%
         filter(`Major Name` == ifelse(input$level == "Nondegree", "Professional", input$level)) %>%
         ungroup()
-      
+    
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
       # case NEW - college and degree type total
       final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$programtype %in%  c(input$level)), ] %>%
@@ -492,6 +499,19 @@ server <- function(input, output, session) {
     }
     else {
       final <- filtered_df[0,] #df[df$Coll %in% c(input$college), ]
+    }
+    
+    # Jaqueline 
+    if ((input$collegeYN) & input$level != "") {
+      final <- filtered_df %>% # df
+        filter(!(`Major Name` %in% c("Undergraduate", "Graduate","Professional", "Campus total"))) %>%
+        filter(Degree != "College total") %>%
+        filter(programtype %in% c(input$level)) %>%
+        group_by(Coll, programtype) %>%
+        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+        mutate(CollName = unlist(college_abb_newest[Coll])) #names(colleges_vec[grepl(Coll, colleges_vec)])) 
+      
+      #unlist(college_abb_newest["KL"])
     }
     
     # # check level YN
@@ -538,25 +558,25 @@ server <- function(input, output, session) {
         select(Degree, programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`)  
       
-    } else if ((input$college == "") & (input$level != "")) { 
+    } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
       # case 2 - degree total
       sex_df = data %>%
         select(`Major Name`,Degree, Total, Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`) 
       
-    } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
+    } else if ((input$college != "") & (input$level != "") & (input$major == "") & (!input$collegeYN)) { 
       # case NEW - college and degree type total
       sex_df = data %>%
         select(programtype, Degree, Total, Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`)  
       
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "")) { 
+    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "") & (!input$collegeYN)) { 
       # case 3 - college, degree type, and major (without conc)
       sex_df = data %>%
         select(programtype, Degree, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`) 
       
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "")) { 
+    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "") & (!input$collegeYN)) { 
       sex_df = data %>%
         select(programtype, Degree, `Major Name`, `Concentration Name (if any)`, Total,
                Men, Women, `Sex Unknown`) %>%
@@ -565,33 +585,54 @@ server <- function(input, output, session) {
       sex_df <- NULL
     }
     
-    # if (input$levelYN) {
-    #   sex_df = data %>%
-    #     select(Degree, programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
-    #     rename(Unknown = `Sex Unknown`) 
-    # }
-    
- 
-    sex_df %>%
-      tidyr::pivot_longer(c(Men, Women, Unknown), names_to = "sex", values_to = "total") %>%
-      mutate(perc = round(100*total/Total, 1)) %>%
-      mutate(sex = factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown"))) %>%
-      ggplot(aes(x=Degree, y=perc, fill=factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown")))) +
-      geom_col() +
-      #facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
-      theme_minimal() +
-      theme(
-        axis.title.x = element_blank()#,
-        #axis.text.x = element_blank(),
-        #axis.ticks.x = element_blank()
-      ) +
-      labs(y = "Percentage",
-           fill = "Sex") + 
-      scale_x_discrete(drop = TRUE) +
-      geom_text(aes(label = ifelse(perc > 1.0, paste0(perc, "%"), "")), position = position_stack(vjust=0.5)) +
-      scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
-                                   "Women" = "#FF69B4",  # Pink
-                                   "Unknown" = "#B0B0B0"))  # Grey
+    if (input$collegeYN & input$level != "") {
+      sex_df = data %>%
+        select(CollName, programtype, Total, Men, Women, `Sex Unknown`) %>%
+        rename(Unknown = `Sex Unknown`)
+      
+      sex_df %>%
+        tidyr::pivot_longer(c(Men, Women, Unknown), names_to = "sex", values_to = "total") %>%
+        mutate(perc = round(100*total/Total, 1)) %>%
+        mutate(sex = factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown"))) %>%
+        ggplot(aes(x=CollName, y=perc, fill=factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown")))) +
+        geom_col() +
+        #facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
+        theme_minimal() +
+        theme(
+          axis.title.x = element_blank()#,
+          #axis.text.x = element_blank(),
+          #axis.ticks.x = element_blank()
+        ) +
+        labs(y = "Percentage",
+             fill = "Sex") + 
+        scale_x_discrete(drop = TRUE) +
+        geom_text(aes(label = ifelse(perc > 1.0, paste0(perc, "%"), "")), position = position_stack(vjust=0.5)) +
+        #guides(x =  guide_axis(angle = 45)) +
+        scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
+                                     "Women" = "#FF69B4",  # Pink
+                                     "Unknown" = "#B0B0B0"))  # Grey
+    } else {
+      sex_df %>%
+        tidyr::pivot_longer(c(Men, Women, Unknown), names_to = "sex", values_to = "total") %>%
+        mutate(perc = round(100*total/Total, 1)) %>%
+        mutate(sex = factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown"))) %>%
+        ggplot(aes(x=Degree, y=perc, fill=factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown")))) +
+        geom_col() +
+        #facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
+        theme_minimal() +
+        theme(
+          axis.title.x = element_blank()#,
+          #axis.text.x = element_blank(),
+          #axis.ticks.x = element_blank()
+        ) +
+        labs(y = "Percentage",
+             fill = "Sex") + 
+        scale_x_discrete(drop = TRUE) +
+        geom_text(aes(label = ifelse(perc > 1.0, paste0(perc, "%"), "")), position = position_stack(vjust=0.5)) +
+        scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
+                                     "Women" = "#FF69B4",  # Pink
+                                     "Unknown" = "#B0B0B0"))  # Grey
+    }
 
   })
   
@@ -609,7 +650,7 @@ server <- function(input, output, session) {
                # "Multiracial", "International", "Race Unknown") %>%
         rename(Unknown = `Race Unknown`)  
       
-    } else if ((input$college == "") & (input$level != "")) { 
+    } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
       # case 2 - degree total
       race_df = data %>%
         #select(everything()) %>%
@@ -649,29 +690,64 @@ server <- function(input, output, session) {
       race_df <- NULL
     }
     
-    pivot_cols <- race_df %>% 
+    
+    if (input$collegeYN & input$level != "") {
+      race_df = data %>%
+        #select(everything()) %>%
+        ungroup() %>%
+        select(CollName, "Total", "Caucasian":"Race Unknown") %>%
+        #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
+        rename(Unknown = `Race Unknown`) 
+      
+      pivot_cols <- race_df %>% 
         select(where(is.numeric))  %>% #select("Caucasian":"Unknown") %>% colnames(.)
         colnames(.)
       pivot_cols <- setdiff(pivot_cols, "Total")
-
+      
       race_df %>%
         ungroup() %>%
         tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>%
-      mutate(perc = round(100*total/Total, 1)) %>%
-      ggplot(aes(y=Degree, x=perc, fill=factor(race))) +
-      geom_col() +
-      theme_minimal() +
-      theme(axis.title.y = element_blank()) +
-      labs(x = "Total",
-           fill = "Race") + 
-      scale_y_discrete(drop = TRUE) +
+        mutate(perc = round(100*total/Total, 1)) %>%
+        ggplot(aes(y=CollName, x=perc, fill=factor(race))) +
+        geom_col() +
+        theme_minimal() +
+        theme(axis.title.y = element_blank()) +
+        labs(x = "Total",
+             fill = "Race") + 
+        scale_y_discrete(drop = TRUE) +
         geom_text(
           aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
           position = position_stack(vjust = 0.5),
           hjust = 0.5,
           color = "black"
         ) +
-      scale_fill_manual(values = setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE)))  
+        scale_fill_manual(values = setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE))) 
+    } else {
+      pivot_cols <- race_df %>% 
+        select(where(is.numeric))  %>% #select("Caucasian":"Unknown") %>% colnames(.)
+        colnames(.)
+      pivot_cols <- setdiff(pivot_cols, "Total")
+      
+      race_df %>%
+        ungroup() %>%
+        tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>%
+        mutate(perc = round(100*total/Total, 1)) %>%
+        ggplot(aes(y=Degree, x=perc, fill=factor(race))) +
+        geom_col() +
+        theme_minimal() +
+        theme(axis.title.y = element_blank()) +
+        labs(x = "Total",
+             fill = "Race") + 
+        scale_y_discrete(drop = TRUE) +
+        geom_text(
+          aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
+          position = position_stack(vjust = 0.5),
+          hjust = 0.5,
+          color = "black"
+        ) +
+        scale_fill_manual(values = setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE))) 
+      
+    }
     
       
     # pivot_cols <- race_df %>% 
@@ -707,7 +783,7 @@ server <- function(input, output, session) {
       residency_df = data %>%
         select(Degree, programtype, `Major Name`, Total, "Illinois", "Non-Illinois") 
       
-    } else if ((input$college == "") & (input$level != "")) { 
+    } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
       # case 2 - degree total
       residency_df = data %>%
         select(`Major Name`,Degree, Total, "Illinois", "Non-Illinois")
@@ -729,26 +805,52 @@ server <- function(input, output, session) {
     } else {
       residency_df <- NULL
     }
+    
+    if (input$collegeYN & input$level != "") {
+      residency_df = data %>%
+        select(CollName, Total, "Illinois", "Non-Illinois")
+      
+      residency_df %>%
+        tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
+        mutate(perc = round(100*total/Total, 1)) %>%
+        ggplot(aes(x=CollName, y=perc, fill=factor(residency))) +
+        geom_col() +
+        # facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
+        theme_minimal() +
+        theme(
+          axis.title.x = element_blank()#,
+          # axis.text.x = element_blank(),
+          #  axis.ticks.x = element_blank()
+        ) +
+        labs(y = "Percentage",
+             fill = "Residency") + 
+        scale_x_discrete(drop = TRUE) +
+        #facet_wrap(~Degree) +
+        geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), color = "white") +
+        scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
+                                     "Non-Illinois" = "#13294B"))  # Blue
+    } else {
+      residency_df %>%
+        tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
+        mutate(perc = round(100*total/Total, 1)) %>%
+        ggplot(aes(x=Degree, y=perc, fill=factor(residency))) +
+        geom_col() +
+        # facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
+        theme_minimal() +
+        theme(
+          axis.title.x = element_blank()#,
+          # axis.text.x = element_blank(),
+          #  axis.ticks.x = element_blank()
+        ) +
+        labs(y = "Percentage",
+             fill = "Residency") + 
+        scale_x_discrete(drop = TRUE) +
+        #facet_wrap(~Degree) +
+        geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), color = "white") +
+        scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
+                                     "Non-Illinois" = "#13294B"))  # Blue
+    }
 
-    residency_df %>%
-      tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
-      mutate(perc = round(100*total/Total, 1)) %>%
-    ggplot(aes(x=Degree, y=perc, fill=factor(residency))) +
-      geom_col() +
-     # facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
-      theme_minimal() +
-      theme(
-        axis.title.x = element_blank()#,
-       # axis.text.x = element_blank(),
-      #  axis.ticks.x = element_blank()
-      ) +
-      labs(y = "Percentage",
-           fill = "Residency") + 
-      scale_x_discrete(drop = TRUE) +
-      #facet_wrap(~Degree) +
-      geom_text(aes(label = paste0(perc, "%")), position = position_stack(vjust=0.5), color = "white") +
-      scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
-                                   "Non-Illinois" = "#13294B"))  # Blue
   })
   
   # Render the plot
