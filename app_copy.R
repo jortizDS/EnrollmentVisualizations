@@ -424,6 +424,11 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "degree", selected = "")
       updateSelectizeInput(session, "conc", selected = "")
     
+    } else if (chk) {
+      updateSelectizeInput(session, "college", choices =  c("Show all colleges" = ""), selected = "")
+      updateSelectizeInput(session, "major", choices =  c("Show all majors" = ""), selected = "")
+      updateSelectizeInput(session, "degree", choices =  c("Choose a degree type" = ""), selected = "")
+      updateSelectizeInput(session, "conc", choices =  c("Show all concentrations" = ""), selected = "")
     }
     
     # if (chk & (input$college == "")) {
