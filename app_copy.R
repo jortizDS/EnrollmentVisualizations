@@ -59,7 +59,7 @@ ui <- fluidPage(
              #   checkboxInput('levelYN', label = "View Campus Enrollment by Degree level", value = FALSE, width = NULL)
              # ),
              selectizeInput('level', 
-                            label = HTML("2. Filter by Degree Level <span title='After selecting degree level and major, if more than one degree \nis available you will have the choice to filter by Degree type'>⍰</span>"), 
+                            label = HTML("2. Filter by Degree Level <span title='After selecting major, if more than one degree is available \nyou will have the choice to filter by Degree type'>⍰</span>"), 
                             choices = c("Show all degree levels" = "", c("Undergraduate", "Graduate", "Nondegree")),
                             selected = ""),
              checkboxInput('collegeYN', label = "View Degree level by college", value = FALSE, width = NULL),
@@ -143,13 +143,13 @@ server <- function(input, output, session) {
     if ((input$year == 2020 & input$semester == "Fall") | input$year > 2020) {
       # Show race and URM side-by-side
       fluidRow(
-        column(8,
+        column(7,
                h3("Enrollment by Race and Ethnicity"),
                shinycssloaders::withSpinner(
                  plotOutput("raceplot", height = "40vh"),
                  type = 1, color = "#007bff", size = 0.5)
         ),
-        column(4,
+        column(5,
                h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
                shinycssloaders::withSpinner(
                  plotOutput("URM_plot", height = "32vh"),
@@ -917,8 +917,8 @@ server <- function(input, output, session) {
              fill = "group") + 
         scale_x_discrete(drop = TRUE) +
         geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 0), "%"), "")), position = position_stack(vjust=0.9), color = "black") +
-        scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) +
-        guides(x =  guide_axis(angle = -90)) 
+        scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) #+
+        #guides(x =  guide_axis(angle = -90)) 
       
       # BOOKMARK JAQUELINE
       
