@@ -62,8 +62,10 @@ ui <- fluidPage(
                             label = HTML("2. Filter by Degree Level <span title='After selecting major, if more than one degree is available \nyou will have the choice to filter by Degree type'>⍰</span>"), 
                             choices = c("Show all degree levels" = "", c("Undergraduate", "Graduate", "Nondegree")),
                             selected = ""),
-             checkboxInput('collegeYN', label = "View Degree level by college", value = FALSE, width = NULL),
+             checkboxInput('collegeYN', label = "View Degree level enrollment by College", value = FALSE, width = NULL),
              selectizeInput('college', "1. Filter by College", choices = c("Show all colleges" = "")),
+             # checkboxInput('collegeDegreeYN', label = "View college enrollment by degree type", value = FALSE, width = NULL),
+             checkboxInput('majorYN', label = "View  college enrollment by major", value = FALSE, width = NULL),
              selectizeInput('major', "3. Filter by Major", choices = c("Show all majors" = "")),
              uiOutput("degree_type_ui"),  # placeholder for conditional dropdown
              selectizeInput('conc', 
@@ -410,6 +412,7 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "degree", selected = "")
       updateSelectizeInput(session, "conc", selected = "")
       updateCheckboxInput(session, "collegeYN", value = FALSE)
+      updateCheckboxInput(session, "majorYN", value = FALSE)
     
     } else if (chk) {
       updateSelectizeInput(session, "college", choices =  c("Show all colleges" = ""), selected = "")
@@ -447,6 +450,7 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "major", selected = "")
       updateSelectizeInput(session, "degree", selected = "")
       updateSelectizeInput(session, "conc", selected = "")
+      updateCheckboxInput(session, "majorYN", value = FALSE)
       
     } else if (col_chk) {
       updateSelectizeInput(session, "major", choices =  c("Show all majors" = ""), selected = "")
@@ -456,6 +460,30 @@ server <- function(input, output, session) {
     
     
     prevColl(col)
+  }, ignoreInit = TRUE)
+  
+  prevMajor    <- reactiveVal("")
+  
+  observeEvent(list(input$major, input$majorYN), {
+    maj    <- input$major
+    maj_chk    <- input$majorYN
+    oldMajor <- prevMajor()
+    
+    # 1) If the user just went from non-empty -> empty checkbox, clear the level
+    if (oldMajor == "" & maj != "" & maj_chk) {
+      updateCheckboxInput(session, "majorYN", value = FALSE)
+    } else if (maj_chk & (maj != "")) {
+      updateSelectizeInput(session, "major", selected = "")
+      updateSelectizeInput(session, "degree", selected = "")
+      updateSelectizeInput(session, "conc", selected = "")
+      
+    } else if (maj_chk) {
+      updateSelectizeInput(session, "degree", choices =  c("Choose a degree type" = ""), selected = "")
+      updateSelectizeInput(session, "conc", choices =  c("Show all concentrations" = ""), selected = "")
+    }
+    
+    
+    prevMajor(maj)
   }, ignoreInit = TRUE)
 
   final_data <- reactive({
@@ -486,8 +514,10 @@ server <- function(input, output, session) {
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
       # case NEW - college and degree type total
       final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$programtype %in%  c(input$level)), ] %>%
-        group_by(Degree,  programtype) %>%
-        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
+        select(-Degree) %>%
+        mutate(Degree = unlist(college_abb_newest[Coll])) %>%
+        group_by(Degree, programtype) %>%
+        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") 
       
     } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "")) { 
       # case 3 - college, degree type, and major (without conc)
@@ -514,7 +544,16 @@ server <- function(input, output, session) {
         filter(programtype %in% c(input$level)) %>%
         group_by(Coll, programtype) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
-        mutate(CollName = unlist(college_abb_newest[Coll])) #names(colleges_vec[grepl(Coll, colleges_vec)])) 
+        mutate(Degree = unlist(college_abb_newest[Coll])) #names(colleges_vec[grepl(Coll, colleges_vec)])) 
+      
+      #unlist(college_abb_newest["KL"])
+    }
+    if ((input$majorYN) & input$college != "") {
+      final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$programtype %in%  c(input$level)), ] %>%
+        select(-Degree) %>%
+        rename(Degree = `Major Name`) %>%
+        group_by(Degree, programtype) %>%
+        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") 
       
       #unlist(college_abb_newest["KL"])
     }
@@ -587,32 +626,34 @@ server <- function(input, output, session) {
                Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`)
     } else {
-      sex_df <- NULL
+      sex_df <- data.frame()
     }
     
     if (input$collegeYN & input$level != "") {
       sex_df = data %>%
-        select(CollName, programtype, Total, Men, Women, `Sex Unknown`) %>%
+        select(Degree, programtype, Total, Men, Women, `Sex Unknown`) %>%
         rename(Unknown = `Sex Unknown`)
-      
+
+    } 
+    
+    if (nrow(sex_df) > 4 & input$college != "") {
       sex_df %>%
-        tidyr::pivot_longer(c(Men, Women, Unknown), names_to = "sex", values_to = "total") %>%
+        ungroup() %>%
+        tidyr::pivot_longer(c("Men", "Women", "Unknown"), names_to = "sex", values_to = "total") %>%
         mutate(perc = round(100*total/Total, 1)) %>%
-        mutate(sex = factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown"))) %>%
-        ggplot(aes(x=CollName, y=perc, fill=factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown")))) +
+        ggplot(aes(y=Degree, x=perc, fill=factor(sex))) +
         geom_col() +
-        #facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
         theme_minimal() +
-        theme(
-          axis.title.x = element_blank()#,
-          #axis.text.x = element_blank(),
-          #axis.ticks.x = element_blank()
+        theme(axis.title.y = element_blank()) +
+        labs(x = "Total",
+             fill = "Gender") + 
+        scale_y_discrete(drop = TRUE) +
+        geom_text(
+          aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+          position = position_stack(vjust = 0.5),
+          hjust = 0.5,
+          color = "black"
         ) +
-        labs(y = "Percentage",
-             fill = "Sex") + 
-        scale_x_discrete(drop = TRUE) +
-        geom_text(aes(label = ifelse(perc > 1.0, paste0(perc, "%"), "")), position = position_stack(vjust=0.5)) +
-        #guides(x =  guide_axis(angle = 45)) +
         scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
                                      "Women" = "#FF69B4",  # Pink
                                      "Unknown" = "#B0B0B0"))  # Grey
@@ -638,6 +679,7 @@ server <- function(input, output, session) {
                                      "Women" = "#FF69B4",  # Pink
                                      "Unknown" = "#B0B0B0"))  # Grey
     }
+    
 
   })
   
@@ -700,7 +742,7 @@ server <- function(input, output, session) {
       race_df = data %>%
         #select(everything()) %>%
         ungroup() %>%
-        select(CollName, "Total", "Caucasian":"Race Unknown") %>%
+        select(Degree, "Total", "Caucasian":"Race Unknown") %>%
         #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
         rename(Unknown = `Race Unknown`) 
       
@@ -713,7 +755,7 @@ server <- function(input, output, session) {
         ungroup() %>%
         tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>%
         mutate(perc = round(100*total/Total, 1)) %>%
-        ggplot(aes(y=CollName, x=perc, fill=factor(race))) +
+        ggplot(aes(y=Degree, x=perc, fill=factor(race))) +
         geom_col() +
         theme_minimal() +
         theme(axis.title.y = element_blank()) +
@@ -813,25 +855,27 @@ server <- function(input, output, session) {
     
     if (input$collegeYN & input$level != "") {
       residency_df = data %>%
-        select(CollName, Total, "Illinois", "Non-Illinois")
-      
+        select(Degree, Total, "Illinois", "Non-Illinois")
+    } 
+    
+    if (nrow(sex_df) > 4 & input$college != "") {
       residency_df %>%
-        tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
-        mutate(perc = round(100*total/Total, 1)) %>%
-        ggplot(aes(x=CollName, y=perc, fill=factor(residency))) +
-        geom_col() +
-        # facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
-        theme_minimal() +
-        theme(
-          axis.title.x = element_blank()#,
-          # axis.text.x = element_blank(),
-          #  axis.ticks.x = element_blank()
-        ) +
-        labs(y = "Percentage",
-             fill = "Residency") + 
-        scale_x_discrete(drop = TRUE) +
-        #facet_wrap(~Degree) +
-        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), position = position_stack(vjust=0.5), color = "black") +
+        ungroup() %>%
+          tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
+          mutate(perc = round(100*total/Total, 1)) %>%
+          ggplot(aes(y=Degree, x=perc, fill=factor(residency))) +
+          geom_col() +
+          theme_minimal() +
+          theme(axis.title.y = element_blank()) +
+          labs(x = "Total",
+               fill = "Residency") + 
+          scale_y_discrete(drop = TRUE) +
+          geom_text(
+            aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+            position = position_stack(vjust = 0.5),
+            hjust = 0.5,
+            color = "black"
+          ) +
         scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
                                      "Non-Illinois" = "#13294B"))  # Blue
     } else {
@@ -864,7 +908,7 @@ server <- function(input, output, session) {
     # Ensure data is not empty and "URM" column exists
     req(nrow(data) > 0, "URM" %in% colnames(data))
     
-  if (!input$collegeYN) {
+  if (!(input$collegeYN | input$majorYN )) {
     if (((input$college == "") & (input$level != ""))) {
       URM_df = data %>%
         select(`Major Name`,Degree, Total, URM) %>%
@@ -897,27 +941,53 @@ server <- function(input, output, session) {
   }
     
     # Create pie chart
-  if (input$collegeYN) {
+  if ((input$collegeYN | input$majorYN) ) {
+    # if ("Degree" %in% colnames(data)) {
+    #   #data = rename(data, Degree=Degree)
+    # }
     URM_df = data %>%
-      select(CollName, Total, URM) %>%
+      select(Degree, Total, URM) %>%
       mutate(`Not URM` = Total - URM) %>%
       pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total") %>%
       ungroup()
     
     urm_length <- nrow(URM_df)
+    
     if (urm_length > 4) {
       
-      URM_df %>%
-        mutate(perc = round(100*total/Total, 1)) %>%
-        ggplot(aes(x=CollName, y=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
-        geom_col() +
-        theme_minimal() +
-        theme(axis.title.x = element_blank()) +
-        labs(y = "Percentage",
-             fill = "group") + 
-        scale_x_discrete(drop = TRUE) +
-        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 0), "%"), "")), position = position_stack(vjust=0.9), color = "black") +
-        scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) #+
+       
+      # Jaqueline Tuesday
+      if (input$major == "" ) {
+        URM_df %>%
+          ungroup() %>%
+          mutate(perc = round(100*total/Total, 1)) %>%
+          ggplot(aes(y=Degree, x=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
+          geom_col() +
+          theme_minimal() +
+          theme(axis.title.y = element_blank()) +
+          labs(x = "Total",
+               fill = "group") + 
+          scale_y_discrete(drop = TRUE) +
+          geom_text(
+            aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
+            position = position_stack(vjust = 0.5),
+            hjust = 0.5,
+            color = "black"
+          ) + 
+          scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) 
+      } else {
+        URM_plot_ex <- URM_df %>%
+          mutate(perc = round(100*total/Total, 1)) %>%
+          ggplot(aes(x=Degree, y=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
+          geom_col() +
+          theme_minimal() +
+          theme(axis.title.x = element_blank()) +
+          labs(y = "Percentage",
+               fill = "group") + 
+          scale_x_discrete(drop = TRUE) +
+          geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 0), "%"), "")), position = position_stack(vjust=0.9), color = "black") +
+          scale_fill_manual("", values = (c("mediumpurple", "lightgreen")))
+      }
         #guides(x =  guide_axis(angle = -90)) 
       
       # BOOKMARK JAQUELINE
@@ -925,13 +995,13 @@ server <- function(input, output, session) {
     } else {
       # Step 1: Add percentage column to each subset
       URM_df <- URM_df %>%
-        group_by(CollName) %>%
+        group_by(Degree) %>%
         mutate(perc = total / sum(total) * 100,
                label = paste0(round(perc, 1), "%")) %>%
         ungroup()
       
       # Step 2: Create pie charts with percentage labels
-      degree_list <- split(URM_df, URM_df$CollName)
+      degree_list <- split(URM_df, URM_df$Degree)
       
       plot_list <- lapply(degree_list, function(df) {
         ggplot(df, aes(x = "", y = total, fill = group)) +
@@ -943,7 +1013,7 @@ server <- function(input, output, session) {
                     size = 4, color = "black") +
           theme_void() +
           
-          labs(title = unique(df$CollName)) +
+          labs(title = unique(df$Degree)) +
           scale_fill_manual("", values = c("mediumpurple", "lightgreen"))
       })
       
