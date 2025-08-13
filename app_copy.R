@@ -65,12 +65,16 @@ ui <- fluidPage(
              checkboxInput('collegeYN', label = "View Degree level enrollment by College", value = FALSE, width = NULL),
              selectizeInput('college', "1. Filter by College", choices = c("Show all colleges" = "")),
              # checkboxInput('collegeDegreeYN', label = "View college enrollment by degree type", value = FALSE, width = NULL),
-             checkboxInput('majorYN', label = "View  college enrollment by major", value = FALSE, width = NULL),
+             checkboxInput('majorYN', label = "View college enrollment by major", value = FALSE, width = NULL),
              selectizeInput('major', "3. Filter by Major", choices = c("Show all majors" = "")),
              uiOutput("degree_type_ui"),  # placeholder for conditional dropdown
-             selectizeInput('conc', 
-                            label = HTML("4. Filter by Concentration (if applicable) <span title='Concentration is applied after major is selected. The \nvalue \"None\" identifies majors without a concentration'>⍰</span>"), 
-                            choices = c("Show all concentrations" = ""))
+             #uiOutput("conc_ui")  # placeholder for conditional dropdown
+             useShinyjs(),
+             hidden(checkboxInput('conc', label = "View major enrollment by concentration", value = "", width = NULL))
+               # selectizeInput('conc',
+               #              label = HTML("4. Filter by Concentration (if applicable) <span title='Concentration is applied after major is selected. The \nvalue \"None\" identifies majors without a concentration'>⍰</span>"),
+               #              choices = c("Show all concentrations" = "")))
+             
              
            ),
            actionButton("reset_filters", "Reset All Filters")
@@ -305,11 +309,11 @@ server <- function(input, output, session) {
   })
   
   
-  ## Update conc choices
+  # Update conc choices
   observeEvent(c(input$college, input$level, input$major, input$degree), {
     # Only require college, level, and major; degree may be optional
     req(input$college != "", input$level != "", input$major != "")
-    
+
     # Filter the data
     if (!is.null(input$degree) && input$degree != "") {
       filtered_concs <- enrollment_data() %>%
@@ -334,31 +338,41 @@ server <- function(input, output, session) {
         pull()
     }
     
-    # Set dropdown choices
-    conc_choices <- c("Show all concentrations" = "", as.vector(filtered_concs))
-    
-    updateSelectInput(session,
-                      inputId = "conc",
-                      choices = conc_choices,
-                      selected = NULL)
+    if (length(as.vector(filtered_concs)) > 1) {
+      # Set dropdown choices
+      conc_choices <- c("Show all concentrations" = "", as.vector(filtered_concs))
+      
+      updateSelectInput(session,
+                        inputId = "conc",
+                        choices = conc_choices,
+                        selected = NULL)
+      
+      showElement("conc")
+    } else {
+      hideElement("conc")
+    }
+
+
   })
   
+  
   observeEvent(c(input$college, input$level, input$major), {
-    #req(input$level != "" & input$college != "")  # proceed only if level is chosen
+    # req(input$level != "" & input$college != "")  # proceed only if level is chosen
     
     # Filter the degrees available for this level
-    filtered_degrees <- enrollment_data() %>%
+    filtered_degrees_df <- enrollment_data() %>%
       filter(Coll == input$college,
              programtype == input$level,
              `Major Name` == input$major) %>%
-      distinct(Degree) %>%
-      pull(Degree)
+      distinct(Degree) 
     
-    if (length(filtered_degrees) > 1) {
+    if (nrow(filtered_degrees_df) > 1) {
       # Render the selectize input only if more than one option exists
+      filtered_degrees <- filtered_degrees_df %>%
+        pull(Degree)
+      
       output$degree_type_ui <- renderUI({
-        selectizeInput("degree", "Select Degree Type",
-                       choices = c("Choose a degree type" = "", filtered_degrees),
+        selectizeInput("degree", label = "test", choices = c("Choose a degree type" = "", filtered_degrees),
                        selected = NULL)
       })
     } else {
@@ -617,8 +631,11 @@ server <- function(input, output, session) {
     } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "") & (!input$collegeYN)) { 
       # case 3 - college, degree type, and major (without conc)
       sex_df = data %>%
-        select(programtype, Degree, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
-        rename(Unknown = `Sex Unknown`) 
+        ungroup() %>%
+        select(programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
+        rename(Unknown = `Sex Unknown`,
+               Degree   = `Major Name`) 
+        
       
     } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "") & (!input$collegeYN)) { 
       sex_df = data %>%
@@ -636,7 +653,7 @@ server <- function(input, output, session) {
 
     } 
     
-    if (nrow(sex_df) > 4 & input$college != "") {
+    if ((nrow(sex_df) > 4) & input$college != "") {
       sex_df %>%
         ungroup() %>%
         tidyr::pivot_longer(c("Men", "Women", "Unknown"), names_to = "sex", values_to = "total") %>%
@@ -722,9 +739,10 @@ server <- function(input, output, session) {
       race_df = data %>%
         ungroup() %>%
         #select(Coll, everything()) %>%
-        select("programtype", "Degree", "Major Name", "Total", "Caucasian":"Race Unknown") %>%
+        select("programtype", "Major Name", "Total", "Caucasian":"Race Unknown") %>%
                #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
-        rename(Unknown = `Race Unknown`) 
+        rename(Unknown = `Race Unknown`,
+               Degree   = `Major Name`) 
       
     } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "")) { 
       race_df = data %>%
@@ -843,7 +861,9 @@ server <- function(input, output, session) {
     } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "")) { 
       # case 3 - college, degree type, and major (without conc)
       residency_df = data %>%
-        select(programtype, Degree, `Major Name`, Total, "Illinois", "Non-Illinois")
+        ungroup() %>%
+        select(programtype, `Major Name`, Total, "Illinois", "Non-Illinois") %>%
+        rename(Degree   = `Major Name`) 
       
     } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "")) { 
       residency_df = data %>%
@@ -858,7 +878,7 @@ server <- function(input, output, session) {
         select(Degree, Total, "Illinois", "Non-Illinois")
     } 
     
-    if (nrow(sex_df) > 4 & input$college != "") {
+    if ((nrow(residency_df) > 4 ) & input$college != "") {
       residency_df %>%
         ungroup() %>%
           tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
@@ -871,7 +891,7 @@ server <- function(input, output, session) {
                fill = "Residency") + 
           scale_y_discrete(drop = TRUE) +
           geom_text(
-            aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+            aes(label = ifelse(perc >= 50.0, paste0(perc, "%"), "")),
             position = position_stack(vjust = 0.5),
             hjust = 0.5,
             color = "black"
@@ -969,7 +989,7 @@ server <- function(input, output, session) {
                fill = "group") + 
           scale_y_discrete(drop = TRUE) +
           geom_text(
-            aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
+            aes(label = ifelse(perc >= 5.0, paste0(perc, "%"), "")),
             position = position_stack(vjust = 0.5),
             hjust = 0.5,
             color = "black"
