@@ -12,6 +12,7 @@ library(tidyr)
 library(gridExtra)
 library(scales)
 library(stringr)
+library(shinyjs)
 
 # load data 
 data_names <- list.files("Data/", pattern = ".RDS", full.names = TRUE)
@@ -70,7 +71,7 @@ ui <- fluidPage(
              uiOutput("degree_type_ui"),  # placeholder for conditional dropdown
              #uiOutput("conc_ui")  # placeholder for conditional dropdown
              useShinyjs(),
-             hidden(checkboxInput('conc', label = "View major enrollment by concentration", value = "", width = NULL))
+             hidden(checkboxInput('conc', label = "View major enrollment by concentration", value = FALSE, width = NULL))
                # selectizeInput('conc',
                #              label = HTML("4. Filter by Concentration (if applicable) <span title='Concentration is applied after major is selected. The \nvalue \"None\" identifies majors without a concentration'>⍰</span>"),
                #              choices = c("Show all concentrations" = "")))
@@ -136,8 +137,9 @@ server <- function(input, output, session) {
     #updateSelectInput(session, "levelYN", selected = "")
     updateSelectInput(session, "level", selected = "")
     updateSelectInput(session, "major", selected = "")
-    updateSelectInput(session, "conc", selected = "")
+    updateCheckboxInput(session, "conc", value = FALSE)
     updateCheckboxInput(session, "levelYN", value = FALSE)
+    hideElement("conc")
   })
 
   
@@ -342,10 +344,7 @@ server <- function(input, output, session) {
       # Set dropdown choices
       conc_choices <- c("Show all concentrations" = "", as.vector(filtered_concs))
       
-      updateSelectInput(session,
-                        inputId = "conc",
-                        choices = conc_choices,
-                        selected = NULL)
+      updateCheckboxInput(session, "conc", value = FALSE)
       
       showElement("conc")
     } else {
@@ -366,24 +365,45 @@ server <- function(input, output, session) {
              `Major Name` == input$major) %>%
       distinct(Degree) 
     
+    
     if (nrow(filtered_degrees_df) > 1) {
-      # Render the selectize input only if more than one option exists
       filtered_degrees <- filtered_degrees_df %>%
         pull(Degree)
       
       output$degree_type_ui <- renderUI({
-        selectizeInput("degree", label = "test", choices = c("Choose a degree type" = "", filtered_degrees),
-                       selected = NULL)
+        tagList(
+          checkboxInput("degreeYN", label = "View major enrollment by degree", value = FALSE),
+          selectizeInput("degree", label = "4. Filter by Degree", 
+                         choices = c("Choose a degree type" = "", filtered_degrees),
+                         selected = NULL)
+        )
       })
     } else {
-      # Optionally render nothing or a hidden input
-      output$degree_type_ui <- renderUI({
-         NULL
-      })
-
-      # Optionally store the only value if needed downstream
+      output$degree_type_ui <- renderUI({ NULL })
+      
       updateSelectInput(session, "degree", choices = "", selected = "")
+      updateCheckboxInput(session, "degreeYN", value = FALSE)
     }
+    
+    ##################
+    # if (nrow(filtered_degrees_df) > 1) {
+    #   # Render the selectize input only if more than one option exists
+    #   filtered_degrees <- filtered_degrees_df %>%
+    #     pull(Degree)
+    #   
+    #   output$degree_type_ui <- renderUI({
+    #     selectizeInput("degree", label = "4. Filter by Degree", choices = c("Choose a degree type" = "", filtered_degrees),
+    #                    selected = NULL)
+    #   })
+    # } else {
+    #   # Optionally render nothing or a hidden input
+    #   output$degree_type_ui <- renderUI({
+    #      NULL
+    #   })
+    # 
+    #   # Optionally store the only value if needed downstream
+    #   updateSelectInput(session, "degree", choices = "", selected = "")
+    # }
   })
   
   
@@ -424,15 +444,16 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "college", selected = "")
       updateSelectizeInput(session, "major", selected = "")
       updateSelectizeInput(session, "degree", selected = "")
-      updateSelectizeInput(session, "conc", selected = "")
+      updateCheckboxInput(session, "conc", value = FALSE)
       updateCheckboxInput(session, "collegeYN", value = FALSE)
       updateCheckboxInput(session, "majorYN", value = FALSE)
+      hideElement("conc")
     
     } else if (chk) {
       updateSelectizeInput(session, "college", choices =  c("Show all colleges" = ""), selected = "")
       updateSelectizeInput(session, "major", choices =  c("Show all majors" = ""), selected = "")
       updateSelectizeInput(session, "degree", choices =  c("Choose a degree type" = ""), selected = "")
-      updateSelectizeInput(session, "conc", choices =  c("Show all concentrations" = ""), selected = "")
+      updateCheckboxInput(session, "conc", value = FALSE)
     }
     
     # if (chk & (input$college == "")) {
@@ -463,13 +484,14 @@ server <- function(input, output, session) {
       updateSelectizeInput(session, "college", selected = "")
       updateSelectizeInput(session, "major", selected = "")
       updateSelectizeInput(session, "degree", selected = "")
-      updateSelectizeInput(session, "conc", selected = "")
+      updateCheckboxInput(session, "conc", value = FALSE)
       updateCheckboxInput(session, "majorYN", value = FALSE)
+      hideElement("conc")
       
     } else if (col_chk) {
       updateSelectizeInput(session, "major", choices =  c("Show all majors" = ""), selected = "")
       updateSelectizeInput(session, "degree", choices =  c("Choose a degree type" = ""), selected = "")
-      updateSelectizeInput(session, "conc", choices =  c("Show all concentrations" = ""), selected = "")
+      updateCheckboxInput(session, "conc", value = FALSE)
     }
     
     
@@ -489,15 +511,44 @@ server <- function(input, output, session) {
     } else if (maj_chk & (maj != "")) {
       updateSelectizeInput(session, "major", selected = "")
       updateSelectizeInput(session, "degree", selected = "")
-      updateSelectizeInput(session, "conc", selected = "")
+      updateCheckboxInput(session, "conc", value = FALSE)
+      hideElement("conc")
       
     } else if (maj_chk) {
       updateSelectizeInput(session, "degree", choices =  c("Choose a degree type" = ""), selected = "")
-      updateSelectizeInput(session, "conc", choices =  c("Show all concentrations" = ""), selected = "")
+      updateCheckboxInput(session, "conc", value = FALSE)
     }
     
     
     prevMajor(maj)
+  }, ignoreInit = TRUE)
+  
+  # by degree 
+  prevDegree    <- reactiveVal("")
+  
+  observeEvent(list(input$degree, input$degreeYN), {
+    
+    # if (!is.null(input$degree) && input$degree != "") {
+    #   
+    # }
+    deg    <- input$degree
+    deg_chk    <- input$degreeYN
+    oldDegree <- prevDegree()
+    
+    # 1) If the user just went from non-empty -> empty checkbox, clear the level
+    if (oldDegree == "" & deg != "" & deg_chk) {
+      updateCheckboxInput(session, "degreeYN", value = FALSE)
+    } else if (deg_chk & (deg != "")) {
+      updateSelectizeInput(session, "degree", selected = "")
+      updateCheckboxInput(session, "conc", value = FALSE)
+      
+    } else if (deg_chk) {
+      updateCheckboxInput(session, "conc", value = FALSE)
+    }
+    
+    
+    prevDegree(deg)
+    
   }, ignoreInit = TRUE)
 
   final_data <- reactive({
@@ -510,8 +561,9 @@ server <- function(input, output, session) {
       if (input$levelYN) {
         final = filtered_df %>%
             filter(`Major Name` %in% c("Undergraduate", "Graduate","Professional")) %>% 
-              #"Undergraduate"="Undergraduate", "Graduate"="Graduate","Professional"="Nondegree")) %>% 
-            group_by(Degree,  programtype, `Major Name`) %>%
+            select(-Degree) %>%
+            rename(Degree = `Major Name`) %>%
+            group_by(Degree) %>%
             summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
         } else {
           final = filtered_df %>%
@@ -527,27 +579,42 @@ server <- function(input, output, session) {
     
     } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
       # case NEW - college and degree type total
-      final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$programtype %in%  c(input$level)), ] %>%
+      final <- filtered_df %>%
+        # filter(Coll %in% c("KL") & (programtype %in% c("Undergraduate"))) %>%
+        filter(Coll %in% c(input$college) & (programtype %in% c(input$level))) %>%
         select(-Degree) %>%
         mutate(Degree = unlist(college_abb_newest[Coll])) %>%
-        group_by(Degree, programtype) %>%
+        group_by(Degree) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") 
       
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "")) { 
+    } else if ((input$college != "") & (input$level != "") & (input$major != "")) { 
       # case 3 - college, degree type, and major (without conc)
-      final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$`Major Name` %in%  c(input$major)) & (filtered_df$programtype %in%  c(input$level)), ] %>%
-        group_by( programtype, Degree, `Major Name`) %>%
+      final <- filtered_df %>%
+        # filter(Coll %in% c("KV") & (programtype %in% c("Undergraduate")) & (`Major Name` %in%  c("Statistics") )) %>%
+        filter(Coll %in% c(input$college) & (`Major Name` %in%  c(input$major)) & (programtype %in% c(input$level))) %>%
+        select(-Degree) %>%
+        rename(Degree := `Major Name`) %>%
+        group_by(Degree) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
       
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "")) { 
-      # case 4 - college, degree type, major, and conc
-      final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$`Major Name` %in%  c(input$major)) &
-                     (filtered_df$programtype %in%  c(input$level)) & (filtered_df$`Concentration Name (if any)` %in%  c(input$conc)), ] %>%
-        group_by(programtype, Degree, `Major Name`, `Concentration Name (if any)`) %>%
-        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
-    }
-    else {
-      final <- filtered_df[0,] #df[df$Coll %in% c(input$college), ]
+      if (!is.null(input$degree) && input$degree != "") {
+        final <- filtered_df %>%
+          #  filter(Coll %in% c("KV") & (programtype %in% c("Graduate")) & (`Major Name` %in%  c("Statistics") ) & Degree == "MS") %>%
+          filter(Coll %in% c(input$college) & (`Major Name` %in%  c(input$major)) &
+                   (programtype %in%  c(input$level)) & (Degree %in% c(input$degree))) %>%
+          group_by(Degree) %>%
+          summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
+      }
+      
+    } else {#else if ((input$college != "") & (input$level != "") & (input$major != "") & input$degree != ""){
+      # selected degree
+      # final <- filtered_df %>%
+      # #  filter(Coll %in% c("KV") & (programtype %in% c("Graduate")) & (`Major Name` %in%  c("Statistics") ) & Degree == "MS") %>%
+      #   filter(Coll %in% c(input$college) & (`Major Name` %in%  c(input$major)) &
+      #                         (programtype %in%  c(input$level)) & (Degree %in% c(input$degree))) %>%
+      #   group_by(Degree) %>%
+      #   summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
+      final <- data.frame()
     }
     
     # Jaqueline 
@@ -555,10 +622,12 @@ server <- function(input, output, session) {
       final <- filtered_df %>% # df
         filter(!(`Major Name` %in% c("Undergraduate", "Graduate","Professional", "Campus total"))) %>%
         filter(Degree != "College total") %>%
+        #filter((programtype %in% c("Graduate")) ) %>%
         filter(programtype %in% c(input$level)) %>%
-        group_by(Coll, programtype) %>%
+        group_by(Coll) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
-        mutate(Degree = unlist(college_abb_newest[Coll])) #names(colleges_vec[grepl(Coll, colleges_vec)])) 
+        mutate(Degree = unlist(college_abb_newest[Coll]))#names(colleges_vec[grepl(Coll, colleges_vec)])) 
+        
       
       #unlist(college_abb_newest["KL"])
     }
@@ -566,10 +635,39 @@ server <- function(input, output, session) {
       final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$programtype %in%  c(input$level)), ] %>%
         select(-Degree) %>%
         rename(Degree = `Major Name`) %>%
-        group_by(Degree, programtype) %>%
+        group_by(Degree) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") 
       
       #unlist(college_abb_newest["KL"])
+    }
+    
+    if ((input$conc)) {
+      
+      if (!is.null(input$degree) && input$degree != "") {
+        final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$`Major Name` %in%  c(input$major)) &
+                                (filtered_df$programtype %in%  c(input$level)) & (filtered_df$Degree %in% c(input$degree)), ] %>%
+          group_by(programtype, `Major Name`, `Concentration Name (if any)`) %>%
+          summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+          ungroup() %>%
+          mutate(Degree = `Concentration Name (if any)`)
+      } else {
+        final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$`Major Name` %in%  c(input$major)) &
+                                (filtered_df$programtype %in%  c(input$level)), ] %>%
+          group_by(programtype, `Major Name`, `Concentration Name (if any)`) %>%
+          summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+          ungroup() %>%
+          mutate(Degree = `Concentration Name (if any)`)
+      }
+      
+      # Add if else to include group by degree
+    }
+    
+    if (!is.null(input$degreeYN) && input$degreeYN) {
+      final <- filtered_df[ (filtered_df$Coll %in% c(input$college)) & (filtered_df$`Major Name` %in%  c(input$major)) &
+                              (filtered_df$programtype %in%  c(input$level)), ] %>%
+        group_by(Degree) %>%
+        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+        ungroup() 
     }
     
     # # check level YN
@@ -581,15 +679,15 @@ server <- function(input, output, session) {
     #     summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") 
     # }
     
-    if (!is.null(input$degree) && input$degree != "") {
-      final <- final %>% filter(Degree == input$degree)
-    }
+    # if (!is.null(input$degree) && input$degree != "") {
+    #   final <- final %>% filter(Degree == input$degree)
+    # }
     return(final)
   })
   
   # output message
   output$nodata_msg <- renderUI({
-    if (nrow(final_data()) == 0 & (input$conc != "") ) {
+    if (nrow(final_data()) == 0 & (input$conc) ) {
       tags$div(
         style = "color: red; font-weight: bold; padding: 10px;",
         "Please select a concentration to display results."
@@ -611,48 +709,56 @@ server <- function(input, output, session) {
     req(nrow(data) > 0)  # This line prevents the rest of the code if data is empty
     
     # case 1 - campus total
-    if (input$college == "" & input$level == "") {
-      sex_df = data %>%
-        select(Degree, programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
-        rename(Unknown = `Sex Unknown`)  
+    # if (input$college == "" & input$level == "") {
+    #   sex_df = data %>%
+    #     select(Degree, programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`)  
+    #   
+    # } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
+    #   # case 2 - degree total
+    #   sex_df = data %>%
+    #     select(`Major Name`,Degree, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`) 
+    #   
+    # } else if ((input$college != "") & (input$level != "") & (input$major == "") & (!input$collegeYN)) { 
+    #   # case NEW - college and degree type total
+    #   sex_df = data %>%
+    #     select(programtype, Degree, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`)  
+    #   
+    # } else if ((input$college != "") & (input$level != "") & (input$major != "") & (!input$collegeYN)) { 
+    #   # case 3 - college, degree type, and major (without conc)
+    #   sex_df = data %>%
+    #     ungroup() %>%
+    #     select(programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`,
+    #            Degree   = `Major Name`) 
+    #     
+    #   
+    # } else {
+    #   sex_df <- data %>%
+    #     ungroup() %>%
+    #     select(programtype, Degree, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`,
+    #            Degree   = `Major Name`) 
+    # }
+    # 
+    # if (input$collegeYN & (input$level != "")) {
+    #   sex_df = data %>%
+    #     select(Degree, programtype, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`)
+    # 
+    # } 
+    # 
+    # if ((input$conc)) {
+    #   sex_df = data %>%
+    #     select(Degree, programtype, Total, Men, Women, `Sex Unknown`) %>%
+    #     rename(Unknown = `Sex Unknown`)
+    # }
+    sex_df = data %>%
+          select(Degree, Total, Men, Women, `Sex Unknown`) %>%
+          rename(Unknown = `Sex Unknown`)
       
-    } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
-      # case 2 - degree total
-      sex_df = data %>%
-        select(`Major Name`,Degree, Total, Men, Women, `Sex Unknown`) %>%
-        rename(Unknown = `Sex Unknown`) 
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major == "") & (!input$collegeYN)) { 
-      # case NEW - college and degree type total
-      sex_df = data %>%
-        select(programtype, Degree, Total, Men, Women, `Sex Unknown`) %>%
-        rename(Unknown = `Sex Unknown`)  
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "") & (!input$collegeYN)) { 
-      # case 3 - college, degree type, and major (without conc)
-      sex_df = data %>%
-        ungroup() %>%
-        select(programtype, `Major Name`, Total, Men, Women, `Sex Unknown`) %>%
-        rename(Unknown = `Sex Unknown`,
-               Degree   = `Major Name`) 
-        
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "") & (!input$collegeYN)) { 
-      sex_df = data %>%
-        select(programtype, Degree, `Major Name`, `Concentration Name (if any)`, Total,
-               Men, Women, `Sex Unknown`) %>%
-        rename(Unknown = `Sex Unknown`)
-    } else {
-      sex_df <- data.frame()
-    }
-    
-    if (input$collegeYN & input$level != "") {
-      sex_df = data %>%
-        select(Degree, programtype, Total, Men, Women, `Sex Unknown`) %>%
-        rename(Unknown = `Sex Unknown`)
-
-    } 
-    
     if ((nrow(sex_df) > 4) & input$college != "") {
       sex_df %>%
         ungroup() %>%
@@ -704,57 +810,61 @@ server <- function(input, output, session) {
     data <- final_data()
     req(nrow(data) > 0)  # This line prevents the rest of the code if data is empty
     
-    # case 1 - campus total
-    if (input$college == "" & input$level == "") {
-      race_df = data %>%
-        ungroup() %>%
-        #select(Coll, everything()) %>%
-        select("Degree", "programtype", "Major Name", "Total", "Caucasian":"Race Unknown") %>%
-               # "Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl",
-               # "Multiracial", "International", "Race Unknown") %>%
-        rename(Unknown = `Race Unknown`)  
-      
-    } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
-      # case 2 - degree total
-      race_df = data %>%
-        #select(everything()) %>%
-        ungroup() %>%
-        select(`Major Name`,Degree, "Total", "Caucasian":"Race Unknown") %>%
-               #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
-        rename(Unknown = `Race Unknown`) 
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
-      # case NEW - college and degree type total
-      race_df = data %>%
-       # select(Coll, everything()) %>%
-        ungroup() %>%
-        select(any_of(c("programtype", "Degree", "Major Name", "Concentration Name (if any)", "Total", 
-                        "Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown"))) %>%
-        #select("Coll", "programtype", "Degree", "Total", "Caucasian":"Race Unknown") %>%
-               #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
-        rename(Unknown = `Race Unknown`)  
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "")) { 
-      # case 3 - college, degree type, and major (without conc)
-      race_df = data %>%
-        ungroup() %>%
-        #select(Coll, everything()) %>%
-        select("programtype", "Major Name", "Total", "Caucasian":"Race Unknown") %>%
-               #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
-        rename(Unknown = `Race Unknown`,
-               Degree   = `Major Name`) 
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "")) { 
-      race_df = data %>%
-        ungroup() %>%
-       # select(Coll, everything()) %>%
-        select(any_of(c("programtype", "Degree", "Major Name", "Concentration Name (if any)", "Total", 
-               "Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown"))) %>%
-        rename(Unknown = `Race Unknown`)
-    } else {
-      race_df <- NULL
-    }
-    
+    # # case 1 - campus total
+    # if (input$college == "" & input$level == "") {
+    #   race_df = data %>%
+    #     ungroup() %>%
+    #     #select(Coll, everything()) %>%
+    #     select("Degree", "programtype", "Major Name", "Total", "Caucasian":"Race Unknown") %>%
+    #            # "Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl",
+    #            # "Multiracial", "International", "Race Unknown") %>%
+    #     rename(Unknown = `Race Unknown`)  
+    #   
+    # } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
+    #   # case 2 - degree total
+    #   race_df = data %>%
+    #     #select(everything()) %>%
+    #     ungroup() %>%
+    #     select(`Major Name`,Degree, "Total", "Caucasian":"Race Unknown") %>%
+    #            #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
+    #     rename(Unknown = `Race Unknown`) 
+    #   
+    # } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
+    #   # case NEW - college and degree type total
+    #   race_df = data %>%
+    #    # select(Coll, everything()) %>%
+    #     ungroup() %>%
+    #     select(any_of(c("programtype", "Degree", "Major Name", "Concentration Name (if any)", "Total", 
+    #                     "Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown"))) %>%
+    #     #select("Coll", "programtype", "Degree", "Total", "Caucasian":"Race Unknown") %>%
+    #            #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
+    #     rename(Unknown = `Race Unknown`)  
+    #   
+    # } else if ((input$college != "") & (input$level != "") & (input$major != "") ) { 
+    #   # case 3 - college, degree type, and major (without conc)
+    #   race_df = data %>%
+    #     ungroup() %>%
+    #     #select(Coll, everything()) %>%
+    #     select("programtype", "Major Name", "Total", "Caucasian":"Race Unknown") %>%
+    #            #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
+    #     rename(Unknown = `Race Unknown`,
+    #            Degree   = `Major Name`) 
+    #   
+    # } else {
+    #   race_df <- NULL
+    # }
+    # 
+    # 
+    # 
+    # if ((input$conc)) {
+    #   race_df = data %>%
+    #     select(Degree, "Total", "Caucasian":"Race Unknown") %>%
+    #     rename(Unknown = `Race Unknown`)
+    # }
+    race_df = data %>%
+      ungroup() %>%
+      select(Degree, "Total", "Caucasian":"Race Unknown") %>%
+      rename(Unknown = `Race Unknown`) 
     
     if (input$collegeYN & input$level != "") {
       race_df = data %>%
@@ -844,39 +954,43 @@ server <- function(input, output, session) {
     
     
     # case 1 - campus total
-    if (input$college == "" & input$level == "") {
-      residency_df = data %>%
-        select(Degree, programtype, `Major Name`, Total, "Illinois", "Non-Illinois") 
-      
-    } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
-      # case 2 - degree total
-      residency_df = data %>%
-        select(`Major Name`,Degree, Total, "Illinois", "Non-Illinois")
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
-      # case NEW - college and degree type total
-      residency_df = data %>%
-        select(programtype, Degree, Total, "Illinois", "Non-Illinois") 
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc == "")) { 
-      # case 3 - college, degree type, and major (without conc)
-      residency_df = data %>%
-        ungroup() %>%
-        select(programtype, `Major Name`, Total, "Illinois", "Non-Illinois") %>%
-        rename(Degree   = `Major Name`) 
-      
-    } else if ((input$college != "") & (input$level != "") & (input$major != "") & (input$conc != "")) { 
-      residency_df = data %>%
-        select(programtype, Degree, `Major Name`, `Concentration Name (if any)`, Total,
-               "Illinois", "Non-Illinois")
-    } else {
-      residency_df <- NULL
-    }
-    
-    if (input$collegeYN & input$level != "") {
-      residency_df = data %>%
-        select(Degree, Total, "Illinois", "Non-Illinois")
-    } 
+    # if (input$college == "" & input$level == "") {
+    #   residency_df = data %>%
+    #     select(Degree, programtype, `Major Name`, Total, "Illinois", "Non-Illinois") 
+    #   
+    # } else if ((input$college == "") & (input$level != "") & (!input$collegeYN)) { 
+    #   # case 2 - degree total
+    #   residency_df = data %>%
+    #     select(`Major Name`,Degree, Total, "Illinois", "Non-Illinois")
+    #   
+    # } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
+    #   # case NEW - college and degree type total
+    #   residency_df = data %>%
+    #     select(programtype, Degree, Total, "Illinois", "Non-Illinois") 
+    #   
+    # } else if ((input$college != "") & (input$level != "") & (input$major != "") ) { 
+    #   # case 3 - college, degree type, and major (without conc)
+    #   residency_df = data %>%
+    #     ungroup() %>%
+    #     select(programtype, `Major Name`, Total, "Illinois", "Non-Illinois") %>%
+    #     rename(Degree   = `Major Name`) 
+    #   
+    # } else {
+    #   residency_df <- NULL
+    # }
+    # 
+    # if (input$collegeYN & input$level != "") {
+    #   residency_df = data %>%
+    #     select(Degree, Total, "Illinois", "Non-Illinois")
+    # } 
+    # 
+    # if ((input$conc)) {
+    #   residency_df = data %>%
+    #     select(Degree, Total, "Illinois", "Non-Illinois")
+    # }
+    residency_df = data %>%
+          select(Degree, Total, "Illinois", "Non-Illinois")
+
     
     if ((nrow(residency_df) > 4 ) & input$college != "") {
       residency_df %>%
@@ -927,44 +1041,47 @@ server <- function(input, output, session) {
     data <- final_data()
     # Ensure data is not empty and "URM" column exists
     req(nrow(data) > 0, "URM" %in% colnames(data))
-    
-  if (!(input$collegeYN | input$majorYN )) {
-    if (((input$college == "") & (input$level != ""))) {
-      URM_df = data %>%
-        select(`Major Name`,Degree, Total, URM) %>%
-        mutate(`Not URM` = Total - URM) %>%
-        pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
-      
-    } else if ("Concentration Name (if any)" %in% colnames(data)) {
-      URM_df = data %>%
-        select(programtype, Degree,`Major Name`, `Concentration Name (if any)`, Total, URM) %>%
-        mutate(`Not URM` = Total - URM) %>%
-        pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
-    } else if (!("Degree" %in% colnames(data) & "Major Name" %in% colnames(data))) {
-      # NEW
-      URM_df = data %>%
-        select(programtype, Degree, Total, URM) %>%
-        mutate(`Not URM` = Total - URM) %>%
-        pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
-    } else if (!("Degree" %in% colnames(data))) {
-      URM_df = data %>%
-        select(programtype, Degree, Total, URM) %>%
-        mutate(`Not URM` = Total - URM) %>%
-        pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
-    } else {
-      URM_df = data %>%
-        #ungroup
-        select(programtype, Degree, `Major Name`, Total, URM) %>%
-        mutate(`Not URM` = Total - URM) %>%
-        pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
-    }
-  }
-    
-    # Create pie chart
-  if ((input$collegeYN | input$majorYN) ) {
-    # if ("Degree" %in% colnames(data)) {
-    #   #data = rename(data, Degree=Degree)
+  #   
+  # if (!(input$collegeYN | input$majorYN )) {
+  #   if (((input$college == "") & (input$level != ""))) {
+  #     URM_df = data %>%
+  #       select(`Major Name`,Degree, Total, URM) %>%
+  #       mutate(`Not URM` = Total - URM) %>%
+  #       pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
+  #     
+  #   } else if ("Concentration Name (if any)" %in% colnames(data)) {
+  #     URM_df = data %>%
+  #       select(programtype, Degree,`Major Name`, `Concentration Name (if any)`, Total, URM) %>%
+  #       mutate(`Not URM` = Total - URM) %>%
+  #       pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
+  #   } else if (!("Degree" %in% colnames(data) & "Major Name" %in% colnames(data))) {
+  #     # NEW
+  #     URM_df = data %>%
+  #       select(programtype, Degree, Total, URM) %>%
+  #       mutate(`Not URM` = Total - URM) %>%
+  #       pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
+  #   } else if (!("Degree" %in% colnames(data))) {
+  #     URM_df = data %>%
+  #       select(programtype, Degree, Total, URM) %>%
+  #       mutate(`Not URM` = Total - URM) %>%
+  #       pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
+  #   } else {
+  #     URM_df = data %>%
+  #       #ungroup
+  #       select(programtype, Degree, `Major Name`, Total, URM) %>%
+  #       mutate(`Not URM` = Total - URM) %>%
+  #       pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total")
+  #   }
+  # }
+  #   
+    # if ((input$conc)) {
+    #   URM_df = data %>%
+    #     select(Degree, Total, URM) %>%
+    #     mutate(`Not URM` = Total - URM) %>%
+    #     pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total") %>%
+    #     ungroup()
     # }
+    
     URM_df = data %>%
       select(Degree, Total, URM) %>%
       mutate(`Not URM` = Total - URM) %>%
@@ -975,9 +1092,9 @@ server <- function(input, output, session) {
     
     if (urm_length > 4) {
       
-       
+      
       # Jaqueline Tuesday
-      if (input$major == "" ) {
+      if (!input$collegeYN) {
         URM_df %>%
           ungroup() %>%
           mutate(perc = round(100*total/Total, 1)) %>%
@@ -996,7 +1113,7 @@ server <- function(input, output, session) {
           ) + 
           scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) 
       } else {
-        URM_plot_ex <- URM_df %>%
+        URM_df %>%
           mutate(perc = round(100*total/Total, 1)) %>%
           ggplot(aes(x=Degree, y=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
           geom_col() +
@@ -1008,7 +1125,7 @@ server <- function(input, output, session) {
           geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 0), "%"), "")), position = position_stack(vjust=0.9), color = "black") +
           scale_fill_manual("", values = (c("mediumpurple", "lightgreen")))
       }
-        #guides(x =  guide_axis(angle = -90)) 
+      #guides(x =  guide_axis(angle = -90)) 
       
       # BOOKMARK JAQUELINE
       
@@ -1041,36 +1158,38 @@ server <- function(input, output, session) {
       grid.arrange(grobs = plot_list, ncol = ifelse(length(plot_list) == 1, 1, 2))
     }
     
-    
-    
-  } else {
-    # Step 1: Add percentage column to each subset
-    URM_df <- URM_df %>%
-      group_by(Degree) %>%
-      mutate(perc = total / sum(total) * 100,
-             label = paste0(round(perc, 1), "%")) %>%
-      ungroup()
-    
-    # Step 2: Create pie charts with percentage labels
-    degree_list <- split(URM_df, URM_df$Degree)
-    
-    plot_list <- lapply(degree_list, function(df) {
-      ggplot(df, aes(x = "", y = total, fill = group)) +
-        geom_col(width = 1) +
-        coord_polar(theta = "y") +
-        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), 
-                  position = position_stack(vjust = 0.5),
-                  hjust = 0.1,     # <-- nudges labels to the right
-                  size = 4, color = "black") +
-        theme_void() +
-        
-        labs(title = unique(df$Degree)) +
-        scale_fill_manual("", values = rev(c("mediumpurple", "lightgreen")))
-    })
-    
-    # Step 3: Arrange plots
-    grid.arrange(grobs = plot_list, ncol = ifelse(length(plot_list) == 1, 1,2 ))
-  }
+  #   # Create pie chart
+  # if ((input$collegeYN | input$majorYN) ) {
+  # 
+  #   
+  # } else {
+  #   # Step 1: Add percentage column to each subset
+  #   URM_df <- URM_df %>%
+  #     group_by(Degree) %>%
+  #     mutate(perc = total / sum(total) * 100,
+  #            label = paste0(round(perc, 1), "%")) %>%
+  #     ungroup()
+  #   
+  #   # Step 2: Create pie charts with percentage labels
+  #   degree_list <- split(URM_df, URM_df$Degree)
+  #   
+  #   plot_list <- lapply(degree_list, function(df) {
+  #     ggplot(df, aes(x = "", y = total, fill = group)) +
+  #       geom_col(width = 1) +
+  #       coord_polar(theta = "y") +
+  #       geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), 
+  #                 position = position_stack(vjust = 0.5),
+  #                 hjust = 0.1,     # <-- nudges labels to the right
+  #                 size = 4, color = "black") +
+  #       theme_void() +
+  #       
+  #       labs(title = unique(df$Degree)) +
+  #       scale_fill_manual("", values = rev(c("mediumpurple", "lightgreen")))
+  #   })
+  #   
+  #   # Step 3: Arrange plots
+  #   grid.arrange(grobs = plot_list, ncol = ifelse(length(plot_list) == 1, 1,2 ))
+  # }
     
     
   })
@@ -1106,20 +1225,20 @@ server <- function(input, output, session) {
       text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
                     " program through the college of ", names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
       
-    } else if (input$college != "" & input$level != "" & input$conc == "") {
+    } else if (input$college != "" & input$level != "" ) {
       # Case 3 - major without concentration total
       text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
                      " program with a major in ",  input$major, " through the college of ",
                      names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
       
-    } else if (input$college != "" & input$level != "" & input$conc != "" & input$conc != "None") {
+    } else if (input$college != "" & input$level != "" ) { # & input$conc != "None"
       # Case 4a - major with concentration total
   
       text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
                      " program with a major in ",  input$major, ", ", input$conc,  " concentration through the college of ",
                      names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
       
-    } else if (input$college != "" & input$level != "" & input$conc != "" & input$conc == "None") {
+    } else if (input$college != "" & input$level != "" ) {  #& input$conc == "None"
       # Case 4b - major with concentration total (edited text to remove mention of conc when equals "None")
       text <-  paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
                       " program with a major in ",  input$major, " through the college of ",
