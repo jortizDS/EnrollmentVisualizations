@@ -13,6 +13,7 @@ library(gridExtra)
 library(scales)
 library(stringr)
 library(shinyjs)
+#library(plotly)
 
 # load data 
 data_names <- list.files("Data/", pattern = ".RDS", full.names = TRUE)
@@ -26,7 +27,15 @@ colleges_vec <- setNames(colleges_df$Coll, colleges_df$`Major Name`)
 college_abb_newest = list(KL="ACES", KM="Gies", KN ="Education", KP="Grainger", KR="FAA", KS = "Graduate", KT = "Media", KU = "Law", 
      KV = "LAS", KW = "DGS", KY="AHS", LC="Vet Med", LG="LER", LL="Social Work", LN="CITL", LP="iSchool", LT="Carle Illinois", NB = "Provost")
 
-
+input = data.frame(level = "Undergraduate",
+                   college = "KV",
+                   major = "Statistics",
+                   degree = "",
+                   levelYN = F,
+                   collegeYN = F,
+                   majorYN = F,
+                   conc = F,
+                   degreeYN = F)
 
 # code ----
 ui <- fluidPage(
@@ -43,35 +52,35 @@ ui <- fluidPage(
   # Entire screen is a fluidRow: left = sidebar + URM, right = plots
   fluidRow(
     # LEFT SIDE: Sidebar + URM Plot
-    column(width = 3,
+    column(width = 2,
            wellPanel(
              helpText("Select one or more filters to customize the enrollment insights"),
              fluidRow(
                column(width = 6,
-                      selectInput("year", "Select Year", choices = rev(c(2004 : 2025)), selected = 2025)),
+                      selectInput("year", "Year", choices = rev(c(2004 : 2025)), selected = 2025)),
                column(width = 6,
-                      selectInput("semester", "Select Semester",
+                      selectInput("semester", "Semester",
                                   choices = NULL)),
                                  #   c("Fall", "Spring", "Summer"), selected = "Spring"))
              ),
-             checkboxInput('levelYN', label = "View Campus Enrollment by Degree level", value = FALSE, width = NULL),
+             checkboxInput('levelYN', label = "View Campus enrollment by Degree level", value = FALSE, width = NULL),
              # conditionalPanel(
              #   condition = "input.level == ''",
              #   checkboxInput('levelYN', label = "View Campus Enrollment by Degree level", value = FALSE, width = NULL)
              # ),
              selectizeInput('level', 
-                            label = HTML("2. Filter by Degree Level <span title='After selecting major, if more than one degree is available \nyou will have the choice to filter by Degree type'>⍰</span>"), 
+                            label = HTML("1. Filter by Degree Level <span title='After selecting major, if more than one degree is available \nyou will have the choice to filter by Degree type'>⍰</span>"), 
                             choices = c("Show all degree levels" = "", c("Undergraduate", "Graduate", "Nondegree")),
                             selected = ""),
-             checkboxInput('collegeYN', label = "View Degree level enrollment by College", value = FALSE, width = NULL),
-             selectizeInput('college', "1. Filter by College", choices = c("Show all colleges" = "")),
+             checkboxInput('collegeYN', label = "View enrollment by College", value = FALSE, width = NULL),
+             selectizeInput('college', "2. Filter by College", choices = c("Show all colleges" = "")),
              # checkboxInput('collegeDegreeYN', label = "View college enrollment by degree type", value = FALSE, width = NULL),
-             checkboxInput('majorYN', label = "View college enrollment by major", value = FALSE, width = NULL),
+             checkboxInput('majorYN', label = "View enrollment by major", value = FALSE, width = NULL),
              selectizeInput('major', "3. Filter by Major", choices = c("Show all majors" = "")),
              uiOutput("degree_type_ui"),  # placeholder for conditional dropdown
              #uiOutput("conc_ui")  # placeholder for conditional dropdown
              useShinyjs(),
-             hidden(checkboxInput('conc', label = "View major enrollment by concentration", value = FALSE, width = NULL))
+             hidden(checkboxInput('conc', label = "View enrollment by concentration", value = FALSE, width = NULL))
                # selectizeInput('conc',
                #              label = HTML("4. Filter by Concentration (if applicable) <span title='Concentration is applied after major is selected. The \nvalue \"None\" identifies majors without a concentration'>⍰</span>"),
                #              choices = c("Show all concentrations" = "")))
@@ -82,7 +91,7 @@ ui <- fluidPage(
     ),
    
     # RIGHT SIDE: Main content
-    column(width = 9,
+    column(width = 10,
            fluidRow(
              column(12,
                     h4("Summary"),
@@ -95,9 +104,15 @@ ui <- fluidPage(
              column(6,
                     h3("Enrollment by Sex"),
                     uiOutput("nodata_msg"),
-                    shinycssloaders::withSpinner(
-                      plotOutput("sexplot", height = "25vh"),
-                      type = 1, color = "#007bff", size = 0.5)
+                    uiOutput("sexplot_ui") 
+                    # div(
+                    #   style = "height: 40vh; overflow-y: auto;",
+                    #   shinycssloaders::withSpinner(
+                    #     sexplot_ui
+                    #    # plotOutput("sexplot", height = "45vh"),  # Set larger height than container so scroll activates
+                    #     type = 1, color = "#007bff", size = 0.5
+                    #   )
+                    # )
              ),
              column(6,
                     h3("Enrollment by Illinois residency"),
@@ -134,11 +149,13 @@ server <- function(input, output, session) {
     
     updateSelectInput(session, "degree", selected = "")
     updateSelectInput(session, "college", selected = "")
-    #updateSelectInput(session, "levelYN", selected = "")
     updateSelectInput(session, "level", selected = "")
     updateSelectInput(session, "major", selected = "")
     updateCheckboxInput(session, "conc", value = FALSE)
     updateCheckboxInput(session, "levelYN", value = FALSE)
+    updateCheckboxInput(session, "collegeYN", value = FALSE)
+    updateCheckboxInput(session, "majorYN", value = FALSE)
+    updateCheckboxInput(session, "degreeYN", value = FALSE)
     hideElement("conc")
   })
 
@@ -177,6 +194,27 @@ server <- function(input, output, session) {
       )
     }
   })
+  
+  # Dynamically choose height based on group count
+  output$sexplot_ui <- renderUI({
+    n_groups <- length(unique(final_data()$Degree))
+    
+    plot_height <- if (n_groups > 10 & !input$collegeYN) {
+      paste0(40 + (n_groups - 10) * 3, "vh")  # grow height with groups
+    } else {
+      "25vh"  # default
+    }
+    
+    div(
+      style = paste0("height:", "25vh", "; overflow-y:auto;"),
+      shinycssloaders::withSpinner(
+        plotOutput("sexplot", height = plot_height),  # tall enough to scroll
+        type = 1, color = "#007bff", size = 0.5
+      )
+    )
+  })
+  
+
   
   enrollment_data <- reactive({
     req(input$year, input$semester)  # wait for user input
@@ -625,7 +663,8 @@ server <- function(input, output, session) {
         #filter((programtype %in% c("Graduate")) ) %>%
         filter(programtype %in% c(input$level)) %>%
         group_by(Coll) %>%
-        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+        summarise(across(where(is.numeric), sum, na.rm = TRUE)) %>%
+        ungroup() %>%
         mutate(Degree = unlist(college_abb_newest[Coll]))#names(colleges_vec[grepl(Coll, colleges_vec)])) 
         
       
@@ -755,52 +794,142 @@ server <- function(input, output, session) {
     #     select(Degree, programtype, Total, Men, Women, `Sex Unknown`) %>%
     #     rename(Unknown = `Sex Unknown`)
     # }
+    
+    
+    ################################
     sex_df = data %>%
           select(Degree, Total, Men, Women, `Sex Unknown`) %>%
           rename(Unknown = `Sex Unknown`)
       
     if ((nrow(sex_df) > 4) & input$college != "") {
+      # sex_df %>%
+      #   ungroup() %>%
+      #   tidyr::pivot_longer(c("Men", "Women", "Unknown"), names_to = "sex", values_to = "total") %>%
+      #   mutate(perc = round(100*total/Total, 1)) %>%
+      #   ggplot(aes(y=Degree, x=perc, fill=factor(sex))) +
+      #   geom_col() +
+      #   theme_minimal() +
+      #   theme(axis.title.y = element_blank()) +
+      #   labs(x = "Total",
+      #        fill = "Gender") + 
+      #   scale_y_discrete(drop = TRUE) +
+      #   geom_text(
+      #     aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+      #     position = position_stack(vjust = 0.5),
+      #     hjust = 0.5,
+      #     color = "black"
+      #   ) +
+      #   scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
+      #                                "Women" = "#FF69B4",  # Pink
+      #                                "Unknown" = "#B0B0B0")) # Grey
       sex_df %>%
         ungroup() %>%
-        tidyr::pivot_longer(c("Men", "Women", "Unknown"), names_to = "sex", values_to = "total") %>%
-        mutate(perc = round(100*total/Total, 1)) %>%
-        ggplot(aes(y=Degree, x=perc, fill=factor(sex))) +
+        tidyr::pivot_longer(
+          c("Men", "Women", "Unknown"),
+          names_to = "sex",
+          values_to = "total"
+        ) %>%
+        mutate(perc = round(100 * total / Total, 1),
+               Degree = reorder(Degree, Total)) %>%
+        ggplot(aes(y = Degree, x = perc, fill = factor(sex))) +
         geom_col() +
         theme_minimal() +
         theme(axis.title.y = element_blank()) +
-        labs(x = "Total",
-             fill = "Gender") + 
+        labs(x = "Percentage & (total)", fill = "Gender") +
         scale_y_discrete(drop = TRUE) +
+        
+        # Label inside stacks (optional, as you already had)
         geom_text(
           aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
           position = position_stack(vjust = 0.5),
-          hjust = 0.5,
           color = "black"
         ) +
-        scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
-                                     "Women" = "#FF69B4",  # Pink
-                                     "Unknown" = "#B0B0B0"))  # Grey
-    } else {
-      sex_df %>%
-        tidyr::pivot_longer(c(Men, Women, Unknown), names_to = "sex", values_to = "total") %>%
-        mutate(perc = round(100*total/Total, 1)) %>%
-        mutate(sex = factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown"))) %>%
-        ggplot(aes(x=Degree, y=perc, fill=factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown")))) +
-        geom_col() +
-        #facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
-        theme_minimal() +
-        theme(
-          axis.title.x = element_blank()#,
-          #axis.text.x = element_blank(),
-          #axis.ticks.x = element_blank()
+        
+        # Add total label at top of each bar
+        geom_text(
+          data = function(df) df %>%
+            group_by(Degree) %>%
+            summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+          aes(y = Degree, x = 105, label = total_label),  # x=100 since perc is on x-axis
+          inherit.aes = FALSE,
+          vjust = 0.5
         ) +
-        labs(y = "Percentage",
-             fill = "Sex") + 
+        
+        scale_fill_manual(values = c(
+          "Men" = "#4A90E2",    
+          "Women" = "#FF69B4",  
+          "Unknown" = "#B0B0B0"
+        )) +
+        xlim(0,115) +
+        theme(legend.position = "right", legend.justification = "top")
+      
+    } else {
+      # p <- sex_df %>%
+      #   tidyr::pivot_longer(c(Men, Women, Unknown), names_to = "sex", values_to = "total") %>%
+      #   mutate(perc = round(100*total/Total, 1)) %>%
+      #   mutate(sex = factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown"))) %>%
+      #   ggplot(aes(x=Degree, y=perc, fill=factor(sex, ordered = TRUE, levels = c("Men", "Women", "Unknown")))) +
+      #   geom_col() +
+      #   #facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
+      #   theme_minimal() +
+      #   theme(
+      #     axis.title.x = element_blank()#,
+      #     #axis.text.x = element_blank(),
+      #     #axis.ticks.x = element_blank()
+      #   ) +
+      #   labs(y = "Percentage",
+      #        fill = "Sex") + 
+      #   scale_x_discrete(drop = TRUE) +
+      #   geom_text(aes(label = ifelse(perc > 1.0, paste0(perc, "%"), "")), position = position_stack(vjust=0.5)) +
+      #   scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
+      #                                "Women" = "#FF69B4",  # Pink
+      #                                "Unknown" = "#B0B0B0"))  # Grey
+      # p
+      
+      sex_df %>%
+        ungroup() %>%
+        tidyr::pivot_longer(
+          c("Men", "Women", "Unknown"),
+          names_to = "sex",
+          values_to = "total"
+        ) %>%
+        mutate(perc = round(100 * total / Total, 1),
+               Degree = reorder(Degree, -Total)) %>%
+        ggplot(aes(x = Degree, y = perc, fill = factor(sex))) +
+        geom_col() +
+        theme_minimal() +
+        theme(axis.title.x = element_blank(),
+              axis.text.y = element_text(size = 11),
+              axis.text.x = element_text(size = 11),
+              legend.text = element_text(size = 11),
+              legend.title = element_text(size = 11)) +
+        labs(y = "Total", fill = "Gender") +
         scale_x_discrete(drop = TRUE) +
-        geom_text(aes(label = ifelse(perc > 1.0, paste0(perc, "%"), "")), position = position_stack(vjust=0.5)) +
-        scale_fill_manual(values = c("Men" = "#4A90E2",    # Blue
-                                     "Women" = "#FF69B4",  # Pink
-                                     "Unknown" = "#B0B0B0"))  # Grey
+        
+        # Label inside stacks (optional, as you already had)
+        geom_text(
+          aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+          position = position_stack(vjust = 0.5),
+          color = "black"
+        ) +
+        
+        # Add total label at top of each bar
+        geom_text(
+          data = function(df) df %>%
+            group_by(Degree) %>%
+            summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+          aes(x = Degree, y = 105, label = total_label),  # x=100 since perc is on x-axis
+          inherit.aes = FALSE,
+          vjust = 0.5
+        ) +
+        
+        scale_fill_manual(values = c(
+          "Men" = "#4A90E2",    
+          "Women" = "#FF69B4",  
+          "Unknown" = "#B0B0B0"
+        )) +
+        ylim(0,115)
+      
     }
     
 
@@ -1008,7 +1137,7 @@ server <- function(input, output, session) {
             aes(label = ifelse(perc >= 50.0, paste0(perc, "%"), "")),
             position = position_stack(vjust = 0.5),
             hjust = 0.5,
-            color = "black"
+            color = "white"
           ) +
         scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
                                      "Non-Illinois" = "#13294B"))  # Blue
@@ -1029,7 +1158,7 @@ server <- function(input, output, session) {
              fill = "Residency") + 
         scale_x_discrete(drop = TRUE) +
         #facet_wrap(~Degree) +
-        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), position = position_stack(vjust=0.5), color = "black") +
+        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), position = position_stack(vjust=0.5), color = "white") +
         scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
                                      "Non-Illinois" = "#13294B"))  # Blue
     }
@@ -1198,73 +1327,148 @@ server <- function(input, output, session) {
     
     data <- final_data()
     total <- sum(data$Total, na.rm = TRUE)
-    firstsentence <- paste0("During the ", input$semester," ", input$year, " semester, there were <b>", scales::comma(total), "</b>")
+    firstsentence <- paste0("During the <i>", input$semester," ", input$year, "</i> semester, there were <b>", scales::comma(total), "</b>")
+    
+    # case 1 - campus total
     if (input$college == "" & input$level == "") {
-      # Case 1 - campus total
-      if (input$levelYN) { 
-        # by program type
-        data_ord = arrange(data, desc(Total))
-        text <- paste(firstsentence, paste(c(paste0(". There were ", data_ord[1, "Total"], " students enrolled in a ", data_ord[1, "Major Name"], " program"), 
-                                       paste(sapply(2:nrow(data_ord), function(x) paste0(data_ord[x, "Total"], " students enrolled in a ",
-                                                                                         data_ord[x, "Major Name"], " program.")), collapse = ", and ")), collapse = ", "))
+      if (input$levelYN) {
+        text <- paste(firstsentence, " students enrolled at the <u>University of Illinois at Urbana-Champaign</u> across 3 degree levels: Undergraduate, Graduate, and Non-degree (Professional).")
+
       } else {
-        text <- paste(firstsentence, " students enrolled in the University of Illinois at Urbana-Champaign campus.")
+        text <- paste(firstsentence, " students enrolled at the <u>University of Illinois at Urbana-Champaign</u>.")
+        
       }
       
-    }  else if (nrow(data) == 0){
-      return("")
+    } else if ((input$college == "") & (input$level != "")) { 
+      # case 2 - degree total
+      text <- paste0(firstsentence, " students enrolled at the <u>", (input$level), " level</u>.")
       
-    } else if ((input$college == "") & (input$level != "")) {
-      # Case 2 - degree total
-      text <- paste(firstsentence, "students enrolled in an", input$level, "program.")
-
-     
-    
-    } else if ((input$college != "") & (input$level != "") & (input$major == "")) {
-      # Case NEWWWW - major without concentration total
-      text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
-                    " program through the college of ", names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
       
-    } else if (input$college != "" & input$level != "" ) {
-      # Case 3 - major without concentration total
-      text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
-                     " program with a major in ",  input$major, " through the college of ",
-                     names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+    } else if ((input$college != "") & (input$level != "") & (input$major == "")) { 
+      # case NEW - college and degree type total
+      text <- paste0(firstsentence, " <i>", (input$level), "</i> students enrolled in the <u>college of ", unlist(college_abb_newest[(input$college)]),
+                     "</u>.") 
       
-    } else if (input$college != "" & input$level != "" ) { # & input$conc != "None"
-      # Case 4a - major with concentration total
-  
-      text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
-                     " program with a major in ",  input$major, ", ", input$conc,  " concentration through the college of ",
-                     names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+    } else if ((input$college != "") & (input$level != "") & (input$major != "")) { 
+      # case 3 - college, degree type, and major (without conc)
+      text <- paste0(firstsentence, " <i>", (input$level), "</i> students enrolled in the <u>", input$major, " major</u>.")
       
-    } else if (input$college != "" & input$level != "" ) {  #& input$conc == "None"
-      # Case 4b - major with concentration total (edited text to remove mention of conc when equals "None")
-      text <-  paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
-                      " program with a major in ",  input$major, " through the college of ",
-                      names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+      if (!is.null(input$degree) && input$degree != "") {
+        text <- paste0(firstsentence, " <i>", (input$degree), "</i> students enrolled in the <u>", input$major, " major</u>.")
+      }
       
-    }
-    else {
-      text <- "No data available for the selected criteria."
-      
-    }
-    # check if student(s)
-    # graduate college
-    # return
-    
-    if (grepl("were 1 students", text)) {
-      text <- str_replace(string = text, pattern = "were 1 students", replacement = "was 1 student")
+    } else {#else if ((input$college != "") & (input$level != "") & (input$major != "") & input$degree != ""){
+      # selected degree
+      # final <- filtered_df %>%
+      # #  filter(Coll %in% c("KV") & (programtype %in% c("Graduate")) & (`Major Name` %in%  c("Statistics") ) & Degree == "MS") %>%
+      #   filter(Coll %in% c(input$college) & (`Major Name` %in%  c(input$major)) &
+      #                         (programtype %in%  c(input$level)) & (Degree %in% c(input$degree))) %>%
+      #   group_by(Degree) %>%
+      #   summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep")
+      text <- paste("")
     }
     
-    if (grepl("college of Graduate College", text)) {
-      text <- str_replace(string = text, pattern = "college of Graduate College", replacement = "Graduate College")
+    
+    ### Fix all texts below and doublecheck above
+    # Jaqueline 
+    if ((input$collegeYN) & input$level != "") {
+      text <- paste0(firstsentence, " students enrolled at the <u>", (input$level), " level</u> across ",
+               length(data$Degree), " colleges.")
+      
+      #unlist(college_abb_newest["KL"])
+    }
+    if ((input$majorYN) & input$college != "") {
+      text <- paste0(firstsentence, " <i>", (input$level), "</i> students enrolled in the <u>college of ", unlist(college_abb_newest[(input$college)]),
+                     "</u> across ", length(data$Degree),  " majors.")
+      
+      #unlist(college_abb_newest["KL"])
     }
     
-    if (grepl("college of School of", text)) {
-      text <- str_replace(string = text, pattern = "college of School of", replacement = "School of")
+    if ((input$conc)) {
+      
+      if (!is.null(input$degree) && input$degree != "") {
+        text <- paste0(firstsentence, " <i>", (input$degree), "</i> students enrolled in the <u>", 
+               input$major, " major</u>  across ", length(data$Degree), " concentrations.")
+      } else {
+        text = paste0(firstsentence, " <i>", (input$level), "</i> students enrolled in the <u>", 
+                      input$major, " major</u> across ", length(data$Degree), " concentrations.")
+      }
+      
+      # Add if else to include group by degree
     }
     
+    if (!is.null(input$degreeYN) && input$degreeYN) {
+      text = paste0(firstsentence, " <i>", (input$level), "</i> students enrolled in the <u>", 
+                    input$major, " major</u> across ", length(data$Degree), " degrees.")
+    }
+    ###########
+    
+    # if (input$college == "" & input$level == "") {
+    #   # Case 1 - campus total
+    #   if (input$levelYN) { 
+    #     # by program type
+    #     data_ord = arrange(data, desc(Total))
+    #     text <- paste(firstsentence, paste(c(paste0(". There were ", data_ord[1, "Total"], " students enrolled in a ", data_ord[1, "Major Name"], " program"), 
+    #                                    paste(sapply(2:nrow(data_ord), function(x) paste0(data_ord[x, "Total"], " students enrolled in a ",
+    #                                                                                      data_ord[x, "Major Name"], " program.")), collapse = ", and ")), collapse = ", "))
+    #   } else {
+    #     text <- paste(firstsentence, " students enrolled in the University of Illinois at Urbana-Champaign campus.")
+    #   }
+    #   
+    # }  else if (nrow(data) == 0){
+    #   return("")
+    #   
+    # } else if ((input$college == "") & (input$level != "")) {
+    #   # Case 2 - degree total
+    #   text <- paste(firstsentence, "students enrolled in an", input$level, "program.")
+    # 
+    #  
+    # 
+    # } else if ((input$college != "") & (input$level != "") & (input$major == "")) {
+    #   # Case NEWWWW - major without concentration total
+    #   text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
+    #                 " program through the college of ", names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+    #   
+    # } else if (input$college != "" & input$level != "" ) {
+    #   # Case 3 - major without concentration total
+    #   text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
+    #                  " program with a major in ",  input$major, " through the college of ",
+    #                  names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+    #   
+    # } else if (input$college != "" & input$level != "" ) { # & input$conc != "None"
+    #   # Case 4a - major with concentration total
+    # 
+    #   text <- paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
+    #                  " program with a major in ",  input$major, ", ", input$conc,  " concentration through the college of ",
+    #                  names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+    #   
+    # } else if (input$college != "" & input$level != "" ) {  #& input$conc == "None"
+    #   # Case 4b - major with concentration total (edited text to remove mention of conc when equals "None")
+    #   text <-  paste0(firstsentence, " students enrolled in a ", tolower(input$level), 
+    #                   " program with a major in ",  input$major, " through the college of ",
+    #                   names(colleges_vec[grepl(input$college, colleges_vec)]), ".")
+    #   
+    # }
+    # else {
+    #   text <- "No data available for the selected criteria."
+    #   
+    # }
+    # # check if student(s)
+    # # graduate college
+    # # return
+    # 
+    # if (grepl("were 1 students", text)) {
+    #   text <- str_replace(string = text, pattern = "were 1 students", replacement = "was 1 student")
+    # }
+    # 
+    # if (grepl("college of Graduate College", text)) {
+    #   text <- str_replace(string = text, pattern = "college of Graduate College", replacement = "Graduate College")
+    # }
+    # 
+    # if (grepl("college of School of", text)) {
+    #   text <- str_replace(string = text, pattern = "college of School of", replacement = "School of")
+    # }
+    # 
     #return(text)
     HTML(text)
     #HTML("This is <b>bold</b> text!")
