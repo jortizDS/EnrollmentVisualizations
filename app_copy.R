@@ -13,6 +13,8 @@ library(gridExtra)
 library(scales)
 library(stringr)
 library(shinyjs)
+library(purrr)
+library(readr)
 #library(plotly)
 
 # load data 
@@ -123,6 +125,8 @@ ui <- fluidPage(
            ),
            
            uiOutput("race_urm_ui"),
+           uiOutput("timeseries_ui"),
+          # plotOutput("timeSeriesPlot"),
            
            
            # Row 3: Data Table
@@ -195,6 +199,24 @@ server <- function(input, output, session) {
     }
   })
   
+  output$timeseries_ui <- renderUI({
+    # Get filtered data
+
+    if (input$major != "") {
+      # Show race and URM side-by-side
+      fluidRow(
+        column(12,
+               h3("Enrollment over Time"),
+               shinycssloaders::withSpinner(
+                 plotOutput("timeSeriesPlot", height = "40vh"),
+                 type = 1, color = "#007bff", size = 0.5)
+        )
+      )
+    }
+  })
+  
+  
+  
   # Dynamically choose height based on group count
   output$sexplot_ui <- renderUI({
     n_groups <- length(unique(final_data()$Degree))
@@ -254,7 +276,112 @@ server <- function(input, output, session) {
     
     
     semester_df
+    
+      
+    ## create observe that creates filter of data, therefore same filter can be applied here to create time series plot
+    #figure out formatting issues, why is somteimte "fall" sepreater 
+    
   })
+  
+  output$timeSeriesPlot <- renderPlot({
+    req(input$major != "")
+    
+    files <- list.files("Data/", pattern = "\\.RDS$", full.names = TRUE)
+    
+    read_filter <- function(file) {
+      df <- readRDS(file)
+      
+      if (!is.null(input$degree) && input$degree != "") {
+        df <- df %>%
+          filter(Coll %in% input$college,
+                 `Major Name` %in% input$major,
+                 programtype %in% input$level,
+                 Degree %in% input$degree)
+      } else {
+        df <- df %>%
+          filter(Coll %in% input$college,
+                 `Major Name` %in% input$major,
+                 programtype %in% input$level)
+      }
+      
+      df %>%
+        group_by(`Major Name`, `Major code`) %>%
+        summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+        mutate(Semester = str_extract(basename(file), "(fa|sp|su)"),
+               Year = str_extract(basename(file), "\\d{2}"))
+    }
+    
+    all_data <- purrr::map_dfr(files, read_filter)
+    
+    validate(
+      need(nrow(all_data) > 0, "No data available for this selection")
+    )
+    
+    all_data %>%
+      mutate(Year = paste0("'", Year),
+             Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE)) %>%
+      ggplot(aes(x = Year, y = Total, fill = Semester)) +
+      geom_col() +
+      theme_minimal() +
+      labs(title = "Major Enrollment over Time", x = "Year", y = "Enrollment")
+  })
+  
+  
+  # timeSeriesPlot <- observeEvent({
+  #   req(input$major != "")
+  # 
+  #   
+  # 
+  #     # 1. List all CSV (or Excel, etc.) files in your folder
+  #     files <- list.files("Data/", pattern = "\\.RDS$", full.names = TRUE)
+  # 
+  #     read_filter <- function(file) {
+  # 
+  #       if (input$major == "" ) {
+  #         df <- data.frame(NA)
+  #       }
+  # 
+  #       if (!is.null(input$degree) && input$degree != "") {
+  # 
+  #         df <- readRDS(file) %>%
+  #           filter(Coll %in% c(input$college) & (`Major Name` %in%  c(input$major)) &
+  #                    (programtype %in%  c(input$level)) & (Degree %in% c(input$degree))) %>%
+  #           group_by(`Major Name`, `Major code`) %>%
+  #           summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+  #           #filter(`Major code` == major_code) %>%
+  #           mutate(Semester = str_extract(basename(file), "(fa|sp|su)"),
+  #                  Year = str_extract(basename(file), "\\d{2}"))
+  #       } else {
+  #         df <- readRDS(file) %>%
+  #           filter(Coll %in% c(input$college) & (`Major Name` %in%  c(input$major)) & (programtype %in% c(input$level))) %>%
+  #           group_by(`Major Name`, `Major code`) %>%
+  #           summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
+  #           #filter(`Major code` == major_code) %>%
+  #           mutate(Semester = str_extract(basename(file), "(fa|sp|su)"),
+  #                  Year = str_extract(basename(file), "\\d{2}"))
+  #       }
+  #       return(df)
+  #     }
+  # 
+  # 
+  #     # 3. Apply to all files
+  #     all_data <- map_dfr(files, read_filter)
+  # 
+  #     if (nrow(all_data) > 0) {
+  #       all_data %>%
+  #         mutate(Year = paste0("'", Year)) %>%
+  #         mutate(Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = T)) %>%
+  #         ggplot(aes(x = Year, y = Total, fill = Semester)) +
+  #         #geom_line() +
+  #         geom_col() +
+  #         theme_minimal() +
+  #         labs(title = paste0("Major Enrollment over Time: "), x = "Year", y = "Enrollment")
+  #     }
+  # 
+  # 
+  # })
+  
+
   
   # Updata Selectize choices ---------------------
   
@@ -834,7 +961,12 @@ server <- function(input, output, session) {
         ggplot(aes(y = Degree, x = perc, fill = factor(sex))) +
         geom_col() +
         theme_minimal() +
-        theme(axis.title.y = element_blank()) +
+      #  theme(axis.title.y = element_blank()) +
+        theme(axis.title.y = element_blank(),
+              axis.text.y = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              legend.text = element_text(size = 10),
+              legend.title = element_text(size = 10)) +
         labs(x = "Percentage & (total)", fill = "Gender") +
         scale_y_discrete(drop = TRUE) +
         
@@ -860,7 +992,7 @@ server <- function(input, output, session) {
           "Women" = "#FF69B4",  
           "Unknown" = "#B0B0B0"
         )) +
-        xlim(0,115) +
+        xlim(0,107) +
         theme(legend.position = "right", legend.justification = "top")
       
     } else {
@@ -899,10 +1031,10 @@ server <- function(input, output, session) {
         geom_col() +
         theme_minimal() +
         theme(axis.title.x = element_blank(),
-              axis.text.y = element_text(size = 11),
-              axis.text.x = element_text(size = 11),
-              legend.text = element_text(size = 11),
-              legend.title = element_text(size = 11)) +
+              axis.text.y = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              legend.text = element_text(size = 10),
+              legend.title = element_text(size = 10)) +
         labs(y = "Total", fill = "Gender") +
         scale_x_discrete(drop = TRUE) +
         
