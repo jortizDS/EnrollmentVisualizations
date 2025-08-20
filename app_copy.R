@@ -1023,7 +1023,7 @@ server <- function(input, output, session) {
     
     
     ################################
-    sex_df = data %>%
+    sex_df = data %>% 
           select(Degree, Total, Men, Women, `Sex Unknown`) %>%
           rename(Unknown = `Sex Unknown`)
       
@@ -1349,49 +1349,93 @@ server <- function(input, output, session) {
     #     select(Degree, Total, "Illinois", "Non-Illinois")
     # }
     residency_df = data %>%
+      ungroup() %>%
           select(Degree, Total, "Illinois", "Non-Illinois")
 
     
     if ((nrow(residency_df) > 4 ) & input$college != "") {
+      
       residency_df %>%
         ungroup() %>%
-          tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
-          mutate(perc = round(100*total/Total, 1)) %>%
-          ggplot(aes(y=Degree, x=perc, fill=factor(residency))) +
-          geom_col() +
-          theme_minimal() +
-          theme(axis.title.y = element_blank()) +
-          labs(x = "Total",
-               fill = "Residency") + 
-          scale_y_discrete(drop = TRUE) +
-          geom_text(
-            aes(label = ifelse(perc >= 50.0, paste0(perc, "%"), "")),
-            position = position_stack(vjust = 0.5),
-            hjust = 0.5,
-            color = "white"
-          ) +
-        scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
-                                     "Non-Illinois" = "#13294B"))  # Blue
-    } else {
-      residency_df %>%
         tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
-        mutate(perc = round(100*total/Total, 1)) %>%
-        ggplot(aes(x=Degree, y=perc, fill=factor(residency))) +
+        mutate(perc = round(100 * total / Total, 1),
+               Degree = reorder(Degree, Total)) %>%
+        ggplot(aes(y = Degree, x = perc, fill = factor(residency))) +
         geom_col() +
-        # facet_wrap(~ Degree, scales = "free_y") +  # Allows different total heights
         theme_minimal() +
-        theme(
-          axis.title.x = element_blank()#,
-          # axis.text.x = element_blank(),
-          #  axis.ticks.x = element_blank()
+        theme(axis.title.y = element_blank(),
+              axis.text.y = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              legend.text = element_text(size = 10),
+              legend.title = element_text(size = 10)) +
+        labs(x = "Total", fill = "Residency") +
+        scale_y_discrete(drop = TRUE) +
+        
+        # Label inside stacks (optional, as you already had)
+        geom_text(
+          aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+          position = position_stack(vjust = 0.5),
+          color = "black"
         ) +
-        labs(y = "Percentage",
-             fill = "Residency") + 
-        scale_x_discrete(drop = TRUE) +
-        #facet_wrap(~Degree) +
-        geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 1), "%"), "")), position = position_stack(vjust=0.5), color = "white") +
+        
+        # Add total label at top of each bar
+        geom_text(
+          data = function(df) df %>%
+            group_by(Degree) %>%
+            summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+          aes(y = Degree, x = 105, label = total_label),  # x=100 since perc is on x-axis
+          inherit.aes = FALSE,
+          vjust = 0.5
+        ) +
+        
         scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
-                                     "Non-Illinois" = "#13294B"))  # Blue
+                                     "Non-Illinois" = "#13294B"))  +
+        xlim(0,115) +
+        theme(legend.position = "right", legend.justification = "top")
+      
+      ################ old below $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+    } else {
+      
+      residency_df %>%
+        ungroup() %>%
+        tidyr::pivot_longer(c("Illinois", "Non-Illinois"), names_to = "residency", values_to = "total") %>%
+        mutate(perc = round(100 * total / Total, 1),
+               Degree = reorder(Degree, -Total)) %>%
+        ggplot(aes(x = Degree, y = perc, fill = factor(residency))) +
+        geom_col() +
+        theme_minimal() +
+        theme(axis.title.x = element_blank(),
+              axis.text.y = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              legend.text = element_text(size = 10),
+              legend.title = element_text(size = 10)) +
+        labs(y = "Total", fill = "residency") +
+        scale_x_discrete(drop = TRUE) +
+        
+        # Label inside stacks (optional, as you already had)
+        geom_text(
+          aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+          position = position_stack(vjust = 0.5),
+          color = "black"
+        ) +
+        
+        # Add total label at top of each bar
+        geom_text(
+          data = function(df) df %>%
+            group_by(Degree) %>%
+            summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+          aes(x = Degree, y = 105, label = total_label),  # x=100 since perc is on x-axis
+          inherit.aes = FALSE,
+          vjust = 0.5
+        ) +
+        
+        scale_fill_manual(values = c("Illinois" = "#E84A27",    # Orange
+                                     "Non-Illinois" = "#13294B"))  +
+        ylim(0,115)
+      
+      
+
     }
 
   })
