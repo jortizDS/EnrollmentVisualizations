@@ -208,7 +208,7 @@ server <- function(input, output, session) {
         column(12,
                h3("Enrollment over Time"),
                shinycssloaders::withSpinner(
-                 plotOutput("timeSeriesPlot", height = "40vh"),
+                 plotOutput("timeSeriesPlot", height = "60vh"),
                  type = 1, color = "#007bff", size = 0.5)
         )
       )
@@ -296,16 +296,26 @@ server <- function(input, output, session) {
           filter(Coll %in% input$college,
                  `Major Name` %in% input$major,
                  programtype %in% input$level,
-                 Degree %in% input$degree)
+                 Degree %in% input$degree) %>%
+          group_by(`Major Name`, `Major code`) 
+      } 
+      
+      if (input$conc) {
+        df <- df %>%
+          filter(Coll %in% input$college,
+                 `Major Name` %in% input$major,
+                 programtype %in% input$level) %>%
+          group_by(`Major Name`, `Major code`, `Concentration Name (if any)`) 
       } else {
         df <- df %>%
           filter(Coll %in% input$college,
                  `Major Name` %in% input$major,
-                 programtype %in% input$level)
+                 programtype %in% input$level) %>%
+          group_by(`Major Name`, `Major code`) 
       }
       
       df %>%
-        group_by(`Major Name`, `Major code`) %>%
+      #  group_by(`Major Name`, `Major code`) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
         mutate(Semester = str_extract(basename(file), "(fa|sp|su)"),
                Year = str_extract(basename(file), "\\d{2}"))
@@ -317,13 +327,29 @@ server <- function(input, output, session) {
       need(nrow(all_data) > 0, "No data available for this selection")
     )
     
-    all_data %>%
+    TSplot <- all_data %>%
       mutate(Year = paste0("'", Year),
              Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE)) %>%
       ggplot(aes(x = Year, y = Total, fill = Semester)) +
       geom_col() +
       theme_minimal() +
       labs(title = "Major Enrollment over Time", x = "Year", y = "Enrollment")
+    
+    if (input$conc) {
+      conc_orders <- all_data %>% 
+        group_by(`Concentration Name (if any)`) %>%
+        summarise(conc_n = sum(Total)) %>%
+        arrange(desc(conc_n)) %>%
+        pull(`Concentration Name (if any)`)
+      
+      TSplot +
+       # Major_total
+        facet_wrap(~ factor(`Concentration Name (if any)`, levels = conc_orders, ordered = T), scales = "free_y", ncol = 2) 
+      
+    } else {
+      TSplot
+    }
+    
   })
   
   
