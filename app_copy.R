@@ -118,9 +118,11 @@ ui <- fluidPage(
              ),
              column(6,
                     h3("Enrollment by Illinois residency"),
-                    shinycssloaders::withSpinner(
-                      plotOutput("resplot", height = "25vh"),
-                      type = 1, color = "#007bff", size = 0.5)
+                    uiOutput("resplot_ui") 
+                    
+                    # shinycssloaders::withSpinner(
+                    #   plotOutput("resplot", height = "25vh"),
+                    #   type = 1, color = "#007bff", size = 0.5)
              )
            ),
            
@@ -169,20 +171,38 @@ server <- function(input, output, session) {
     data <- final_data()
     req(nrow(data) > 0)
     
+    n_groups <- length(unique(final_data()$Degree))
+    
+    plot_height <- if (n_groups > 10 & !input$collegeYN) {
+      paste0(40 + (n_groups - 10) * 3, "vh")  # grow height with groups
+    } else {
+      "25vh"  # default
+    }
+    
+    
     if ((input$year == 2020 & input$semester == "Fall") | input$year > 2020) {
       # Show race and URM side-by-side
+      
+      
       fluidRow(
         column(7,
                h3("Enrollment by Race and Ethnicity"),
-               shinycssloaders::withSpinner(
-                 plotOutput("raceplot", height = "40vh"),
-                 type = 1, color = "#007bff", size = 0.5)
+               div(
+                 style = paste0("height:", "25vh", "; overflow-y:auto;"),
+                 shinycssloaders::withSpinner(
+                   plotOutput("raceplot", height = plot_height),  # tall enough to scroll
+                   type = 1, color = "#007bff", size = 0.5
+                 )
+               )
         ),
         column(5,
                h3(HTML("Underrepresented Minority Breakdown <span title='URM includes American Indian & Alaskan Native, Native Hawaiian & Pacific Islander, African American, and Hispanic/Latino. Multi-racial persons are included if one selected group is URM. Foreign students are counted separately. This information is available post Fall 2020.' style='cursor: help;'>⍰</span>")),
-               shinycssloaders::withSpinner(
-                 plotOutput("URM_plot", height = "32vh"),
-                 type = 1, color = "#007bff", size = 0.5
+               div(
+                 style = paste0("height:", "25vh", "; overflow-y:auto;"),
+                 shinycssloaders::withSpinner(
+                   plotOutput("URM_plot", height = plot_height),  # tall enough to scroll
+                   type = 1, color = "#007bff", size = 0.5
+                 )
                )
         )
       )
@@ -191,9 +211,13 @@ server <- function(input, output, session) {
       fluidRow(
         column(12,
                h3("Enrollment by Race and Ethnicity"),
-               shinycssloaders::withSpinner(
-                 plotOutput("raceplot", height = "40vh"),
-                 type = 1, color = "#007bff", size = 0.5)
+               div(
+                 style = paste0("height:", "25vh", "; overflow-y:auto;"),
+                 shinycssloaders::withSpinner(
+                   plotOutput("raceplot", height = plot_height),  # tall enough to scroll
+                   type = 1, color = "#007bff", size = 0.5
+                 )
+               )
         )
       )
     }
@@ -203,15 +227,45 @@ server <- function(input, output, session) {
     # Get filtered data
 
     if (input$major != "") {
-      # Show race and URM side-by-side
-      fluidRow(
-        column(12,
-               h3("Enrollment over Time"),
-               shinycssloaders::withSpinner(
-                 plotOutput("timeSeriesPlot", height = "60vh"),
-                 type = 1, color = "#007bff", size = 0.5)
+      n_groups <- length(unique(final_data()$Degree))
+      
+      plot_height <- if (n_groups > 10 & !input$collegeYN) {
+        paste0(40 + (n_groups - 10) * 3, "vh")  # grow height with groups
+      } else {
+        "25vh"  # default
+      }
+      
+      if (input$conc) {
+        # Show race and URM side-by-side
+        fluidRow(
+          column(12,
+                 h3("Enrollment over Time"),
+                 div(
+                   style = paste0("height:", "60vh", "; overflow-y:auto;"),
+                   shinycssloaders::withSpinner(
+                     plotOutput("timeSeriesPlot", height = plot_height),  # tall enough to scroll
+                     type = 1, color = "#007bff", size = 0.5
+                   )
+                 )
+          )
         )
-      )
+      } else {
+        # Show race and URM side-by-side
+        fluidRow(
+          column(12,
+                 h3("Enrollment over Time"),
+                 div(
+                   style = paste0("height:", "30vh", "; overflow-y:auto;"),
+                   shinycssloaders::withSpinner(
+                     plotOutput("timeSeriesPlot", height = plot_height),  # tall enough to scroll
+                     type = 1, color = "#007bff", size = 0.5
+                   )
+                 )
+          )
+        )
+      }
+      
+
     }
   })
   
@@ -231,6 +285,25 @@ server <- function(input, output, session) {
       style = paste0("height:", "25vh", "; overflow-y:auto;"),
       shinycssloaders::withSpinner(
         plotOutput("sexplot", height = plot_height),  # tall enough to scroll
+        type = 1, color = "#007bff", size = 0.5
+      )
+    )
+  })
+  
+  # Dynamically choose height based on group count
+  output$resplot_ui <- renderUI({
+    n_groups <- length(unique(final_data()$Degree))
+    
+    plot_height <- if (n_groups > 10 & !input$collegeYN) {
+      paste0(40 + (n_groups - 10) * 3, "vh")  # grow height with groups
+    } else {
+      "25vh"  # default
+    }
+    
+    div(
+      style = paste0("height:", "25vh", "; overflow-y:auto;"),
+      shinycssloaders::withSpinner(
+        plotOutput("resplot", height = plot_height),  # tall enough to scroll
         type = 1, color = "#007bff", size = 0.5
       )
     )
