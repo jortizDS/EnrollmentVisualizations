@@ -26,9 +26,12 @@ colleges_df <- df %>%
 
 colleges_vec <- setNames(colleges_df$Coll, colleges_df$`Major Name`)
 
-college_abb_newest = list(KL="ACES", KM="Gies", KN ="Education", KP="Grainger", KR="FAA", KS = "Graduate", KT = "Media", KU = "Law", 
-     KV = "LAS", KW = "DGS", KY="AHS", LC="Vet Med", LG="LER", LL="Social Work", LN="CITL", LP="iSchool", LT="Carle Illinois", NB = "Provost")
+#college_abb_newest = list(KL="ACES", KM="BUS", KN ="EDUC", KP="ENGR", KR="FAA", KS = "Grad", KT = "MDIA", KU = "LAW", 
+#     KV = "LAS", KW = "DGS", KY="AHS", LC="VETMED", LG="LER", LL="SOCW", LN="CITL", LP="IS", LT="CIMED", NB = "Provost")#,
+#     LE = "Aviation")
 
+college_abb_newest = list(KL="ACES", KM="Gies", KN ="Education", KP="Grainger", KR="FAA", KS = "Graduate", KT = "Media", KU = "Law", 
+                          KV = "LAS", KW = "DGS", KY="AHS", LC="Vet Med", LG="LER", LL="Social Work", LN="CITL", LP="iSchool", LT="Carle Illinois", NB = "Provost")
 input = data.frame(level = "Undergraduate",
                    college = "KV",
                    major = "Statistics",
@@ -37,7 +40,9 @@ input = data.frame(level = "Undergraduate",
                    collegeYN = F,
                    majorYN = F,
                    conc = F,
-                   degreeYN = F)
+                   degreeYN = F,
+                   semester = "Spring",
+                   year = 2004)
 
 # code ----
 ui <- fluidPage(
@@ -229,19 +234,21 @@ server <- function(input, output, session) {
     if (input$major != "") {
       n_groups <- length(unique(final_data()$Degree))
       
-      plot_height <- if (n_groups > 10 & !input$collegeYN) {
+      plot_height <- if ((n_groups > 10 & !input$collegeYN)) {
         paste0(40 + (n_groups - 10) * 3, "vh")  # grow height with groups
+      } else if (input$conc | input$degreeYN) {
+        paste0(40 + (n_groups - 1) * 20, "vh")  # grow height with groups
       } else {
         "25vh"  # default
       }
       
-      if (input$conc) {
+      if (input$conc | input$degreeYN) {
         # Show race and URM side-by-side
         fluidRow(
           column(12,
                  h3("Enrollment over Time"),
                  div(
-                   style = paste0("height:", "60vh", "; overflow-y:auto;"),
+                   style = paste0("height:", plot_height, "; overflow-y:auto;"),
                    shinycssloaders::withSpinner(
                      plotOutput("timeSeriesPlot", height = plot_height),  # tall enough to scroll
                      type = 1, color = "#007bff", size = 0.5
@@ -387,6 +394,14 @@ server <- function(input, output, session) {
           group_by(`Major Name`, `Major code`) 
       }
       
+      if (input$degreeYN) {
+        df <- df %>%
+          filter(Coll %in% input$college,
+                 `Major Name` %in% input$major,
+                 programtype %in% input$level) %>%
+          group_by(`Major Name`, `Major code`, Degree) 
+      } 
+      
       df %>%
       #  group_by(`Major Name`, `Major code`) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
@@ -400,13 +415,29 @@ server <- function(input, output, session) {
       need(nrow(all_data) > 0, "No data available for this selection")
     )
     
+    #######
+    
+    # all_data %>% filter(Semester == up_semester & Year == substring(input$year, 3, 4))
+    # scale_fill_manual(values = c(
+    #   "su" = "#9d7b68",    
+    #   "sp" = "#715335",  
+    #   "fa" = "#514420"
+    # ))
+    
+    #############
     TSplot <- all_data %>%
+      #filter() %>%
       mutate(Year = paste0("'", Year),
              Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE)) %>%
       ggplot(aes(x = Year, y = Total, fill = Semester)) +
       geom_col() +
       theme_minimal() +
-      labs(title = "Major Enrollment over Time", x = "Year", y = "Enrollment")
+      labs(title = "Major Enrollment over Time", x = "Fiscal Year", y = "Enrollment") +
+      scale_fill_manual(values = c(
+        "su" = "#9d7b68",    
+        "sp" = "#a0522d",  
+        "fa" = "#514420"
+      )) 
     
     if (input$conc) {
       conc_orders <- all_data %>% 
@@ -417,10 +448,42 @@ server <- function(input, output, session) {
       
       TSplot +
        # Major_total
-        facet_wrap(~ factor(`Concentration Name (if any)`, levels = conc_orders, ordered = T), scales = "free_y", ncol = 2) 
+        labs(title = "Enrollment over Time by Major concentration", x = "Fiscal Year", y = "Enrollment") +
+        facet_wrap(~ factor(`Concentration Name (if any)`, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
+        theme(legend.position = "right", legend.justification = "top", 
+              strip.text.x = element_text(size = 15),
+              axis.text.y = element_text(size = 12),
+              axis.text.x = element_text(size = 15),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 12),
+              axis.title = element_text(size = 13),
+              strip.background = element_rect(fill = "lightgray", color = NA))
+    } else if (input$degreeYN) {
+      conc_orders <- all_data %>% 
+        group_by(Degree) %>%
+        summarise(conc_n = sum(Total)) %>%
+        arrange(desc(conc_n)) %>%
+        pull(Degree)
       
+      TSplot +
+        # Major_total
+        labs(title = "Enrollment over Time by Degree", x = "Fiscal Year", y = "Enrollment") +
+        facet_wrap(~ factor(Degree, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
+        theme(legend.position = "right", legend.justification = "top", 
+              strip.text.x = element_text(size = 15),
+              axis.text.y = element_text(size = 12),
+              axis.text.x = element_text(size = 15),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 12),
+              axis.title = element_text(size = 13),
+              strip.background = element_rect(fill = "lightgray", color = NA))
     } else {
-      TSplot
+      TSplot +
+        theme(axis.text.y = element_text(size = 12),
+              axis.text.x = element_text(size = 15),
+              legend.text = element_text(size = 12),
+              legend.title = element_text(size = 12))
+        
     }
     
   })
@@ -466,16 +529,20 @@ server <- function(input, output, session) {
   #     # 3. Apply to all files
   #     all_data <- map_dfr(files, read_filter)
   # 
-  #     if (nrow(all_data) > 0) {
-  #       all_data %>%
-  #         mutate(Year = paste0("'", Year)) %>%
-  #         mutate(Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = T)) %>%
-  #         ggplot(aes(x = Year, y = Total, fill = Semester)) +
-  #         #geom_line() +
-  #         geom_col() +
-  #         theme_minimal() +
-  #         labs(title = paste0("Major Enrollment over Time: "), x = "Year", y = "Enrollment")
-  #     }
+      # if (nrow(all_data) > 0) {
+      #   
+      #   all_data %>%
+      #     mutate(Semester = factor(Semester, levels = (c("fa", "sp", "su")), ordered = T)) %>%
+      #     mutate(FY = ifelse(Semester %in% c("sp", "su"), as.numeric(paste0("20", Year)), as.numeric(paste0("20", Year))+1) ) %>%
+      #     mutate(FY = paste0("'", substr(FY, 3, 4))) %>%
+      #     ggplot(aes(x = Semester, y = Total, fill = Semester)) +
+      #     #geom_line() +
+      #     geom_col() +
+      #     theme_minimal() +
+      #     labs(title = paste0("Major Enrollment over Time: "), x = "Year", y = "Enrollment") +
+      #     facet_wrap(~FY, nrow = 1, scales = "free_x") +
+      #     theme(axis.text.x = element_blank())
+      # }
   # 
   # 
   # })
@@ -814,6 +881,9 @@ server <- function(input, output, session) {
     prevDegree(deg)
     
   }, ignoreInit = TRUE)
+  
+  
+  
 
   final_data <- reactive({
     
@@ -893,7 +963,7 @@ server <- function(input, output, session) {
         ungroup() %>%
         mutate(Degree = unlist(college_abb_newest[Coll]))#names(colleges_vec[grepl(Coll, colleges_vec)])) 
         
-      
+    
       #unlist(college_abb_newest["KL"])
     }
     if ((input$majorYN) & input$college != "") {
@@ -1221,12 +1291,15 @@ server <- function(input, output, session) {
     #     select(Degree, "Total", "Caucasian":"Race Unknown") %>%
     #     rename(Unknown = `Race Unknown`)
     # }
-    race_df = data %>%
-      ungroup() %>%
-      select(Degree, "Total", "Caucasian":"Race Unknown") %>%
-      rename(Unknown = `Race Unknown`) 
+    # race_df = data %>%
+    #   ungroup() %>%
+    #   select(Degree, "Total", "Caucasian":"Race Unknown") %>%
+    #   rename(Unknown = `Race Unknown`) 
+    # 
+    # if ((input$collegeYN & input$level != "") | input$majorYN) {
+    #   
     
-    if (input$collegeYN & input$level != "") {
+    
       race_df = data %>%
         #select(everything()) %>%
         ungroup() %>%
@@ -1239,50 +1312,107 @@ server <- function(input, output, session) {
         colnames(.)
       pivot_cols <- setdiff(pivot_cols, "Total")
       
-      race_df %>%
-        ungroup() %>%
-        tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>%
-        mutate(perc = round(100*total/Total, 1)) %>%
-        ggplot(aes(y=Degree, x=perc, fill=factor(race))) +
-        geom_col() +
-        theme_minimal() +
-        theme(axis.title.y = element_blank()) +
-        labs(x = "Total",
-             fill = "Race") + 
-        scale_y_discrete(drop = TRUE) +
-        geom_text(
-          aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
-          position = position_stack(vjust = 0.5),
-          hjust = 0.5,
-          color = "black"
-        ) +
-        scale_fill_manual(values = setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE))) 
-    } else {
-      pivot_cols <- race_df %>% 
-        select(where(is.numeric))  %>% #select("Caucasian":"Unknown") %>% colnames(.)
-        colnames(.)
-      pivot_cols <- setdiff(pivot_cols, "Total")
+      
+      col_values = c("African American" = "#C5B0D5", "Asian American" = "#FF9896",
+        "Caucasian"="#17BECF", "Hawaiin/Pacific Isl"="#D62728",
+        "Hispanic"="#98DF8A", "International"="#FF7F0E",
+        "Multiracial"="#BCBD22", "Native American"="#006BA4", 
+        "Unknown"="#595959")
       
       race_df %>%
         ungroup() %>%
         tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>%
-        mutate(perc = round(100*total/Total, 1)) %>%
-        ggplot(aes(y=Degree, x=perc, fill=factor(race))) +
+        mutate(perc = round(100 * total / Total, 1),
+               Degree = reorder(Degree, Total)) %>%
+        ggplot(aes(y = Degree, x = perc, fill = factor(race))) +
         geom_col() +
         theme_minimal() +
-        theme(axis.title.y = element_blank()) +
-        labs(x = "Total",
-             fill = "Race") + 
+        #  theme(axis.title.y = element_blank()) +
+        theme(axis.title.y = element_blank(),
+              axis.text.y = element_text(size = 10),
+              axis.text.x = element_text(size = 10),
+              legend.text = element_text(size = 10),
+              legend.title = element_text(size = 10)) +
+        labs(x = "Percentage & (total)", fill = "Race") +
         scale_y_discrete(drop = TRUE) +
+        
+        # Label inside stacks (optional, as you already had)
         geom_text(
           aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
           position = position_stack(vjust = 0.5),
-          hjust = 0.5,
           color = "black"
         ) +
-        scale_fill_manual(values = setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE))) 
-      
-    }
+        
+        # Add total label at top of each bar
+        geom_text(
+          data = function(df) df %>%
+            group_by(Degree) %>%
+            summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+          aes(y = Degree, x = 105, label = total_label),  # x=100 since perc is on x-axis
+          inherit.aes = FALSE,
+          vjust = 0.5
+        ) +
+        
+        scale_fill_manual(values = 
+                            col_values
+                           # setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE))
+                          ) +
+        xlim(0,107) +
+        theme(legend.position = "right", legend.justification = "top")
+    #   
+    # 
+    # } else {
+    #   race_df = data %>%
+    #     #select(everything()) %>%
+    #     ungroup() %>%
+    #     select(Degree, "Total", "Caucasian":"Race Unknown") %>%
+    #     #"Caucasian","Asian American","African American","Hispanic","Native American","Hawaiian/Pacific Isl","Multiracial", "International", "Race Unknown") %>%
+    #     rename(Unknown = `Race Unknown`) 
+    #   
+    #   pivot_cols <- race_df %>% 
+    #     select(where(is.numeric))  %>% #select("Caucasian":"Unknown") %>% colnames(.)
+    #     colnames(.)
+    #   pivot_cols <- setdiff(pivot_cols, "Total")
+    #   
+    #   race_df %>%
+    #     ungroup() %>%
+    #     tidyr::pivot_longer(all_of(pivot_cols), names_to = "race", values_to = "total") %>%
+    #     mutate(perc = round(100 * total / Total, 1),
+    #            Degree = reorder(Degree, Total)) %>%
+    #     ggplot(aes(x = Degree,  y= perc, fill = factor(race))) +
+    #     geom_col() +
+    #     theme_minimal() +
+    #     #  theme(axis.title.y = element_blank()) +
+    #     theme(axis.title.x = element_blank(),
+    #           axis.text.y = element_text(size = 10),
+    #           axis.text.x = element_text(size = 10),
+    #           legend.text = element_text(size = 10),
+    #           legend.title = element_text(size = 10)) +
+    #     labs(y = "Percentage & (total)", fill = "Race") +
+    #     scale_x_discrete(drop = TRUE) +
+    #     
+    #     # Label inside stacks (optional, as you already had)
+    #     geom_text(
+    #       aes(label = ifelse(perc > 5.0, paste0(perc, "%"), "")),
+    #       position = position_stack(vjust = 0.5),
+    #       color = "black"
+    #     ) +
+    #     
+    #     # Add total label at top of each bar
+    #     geom_text(
+    #       data = function(df) df %>%
+    #         group_by(Degree) %>%
+    #         summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+    #       aes(x = Degree, y = 105, label = total_label),  # x=100 since perc is on x-axis
+    #       inherit.aes = FALSE,
+    #       vjust = 0.5
+    #     ) +
+    #     
+    #     scale_fill_manual(values = setNames(palette.colors(palette = "Okabe-Ito"), sort(unique(pivot_cols), decreasing = TRUE))) +
+    #     ylim(0,107) +
+    #     theme(legend.position = "right", legend.justification = "top")
+
+    # }
     
       
     # pivot_cols <- race_df %>% 
@@ -1486,53 +1616,162 @@ server <- function(input, output, session) {
     #     ungroup()
     # }
     
-    URM_df = data %>%
-      select(Degree, Total, URM) %>%
-      mutate(`Not URM` = Total - URM) %>%
-      pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total") %>%
-      ungroup()
-    
-    urm_length <- nrow(URM_df)
-    
-    if (urm_length > 4) {
-      
-      
-      # Jaqueline Tuesday
-      if (!input$collegeYN) {
-        URM_df %>%
-          ungroup() %>%
-          mutate(perc = round(100*total/Total, 1)) %>%
-          ggplot(aes(y=Degree, x=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
-          geom_col() +
-          theme_minimal() +
-          theme(axis.title.y = element_blank()) +
-          labs(x = "Total",
-               fill = "group") + 
-          scale_y_discrete(drop = TRUE) +
-          geom_text(
-            aes(label = ifelse(perc >= 5.0, paste0(perc, "%"), "")),
-            position = position_stack(vjust = 0.5),
-            hjust = 0.5,
-            color = "black"
-          ) + 
-          scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) 
-      } else {
-        URM_df %>%
-          mutate(perc = round(100*total/Total, 1)) %>%
-          ggplot(aes(x=Degree, y=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
-          geom_col() +
-          theme_minimal() +
-          theme(axis.title.x = element_blank()) +
-          labs(y = "Percentage",
-               fill = "group") + 
-          scale_x_discrete(drop = TRUE) +
-          geom_text(aes(label = ifelse(perc > 50.0, paste0(round(perc, 0), "%"), "")), position = position_stack(vjust=0.9), color = "black") +
-          scale_fill_manual("", values = (c("mediumpurple", "lightgreen")))
-      }
+    # URM_df = data %>%
+    #   select(Degree, Total, URM) %>%
+    #   mutate(`Not URM` = Total - URM) %>%
+    #   pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total") %>%
+    #   ungroup()
+    # 
+    # urm_length <- nrow(URM_df)
+    # 
+    # if (urm_length > 4) {
+    #   
+    #   
+    #   # Jaqueline Tuesday
+    #   if (input$collegeYN) {
+    #     
+    #     URM_df %>%
+    #       mutate(perc = round(100 * total / Total, 1),
+    #              Degree = reorder(Degree, -Total)) %>%
+    #       ggplot(aes(x = Degree, y = perc, fill = factor(group))) +
+    #       geom_col() +
+    #       theme_minimal() +
+    #       theme(axis.title.x = element_blank(),
+    #             axis.text.y = element_text(size = 10),
+    #             axis.text.x = element_text(size = 10),
+    #             legend.text = element_text(size = 10),
+    #             legend.title = element_text(size = 10)) +
+    #       labs(y = "Total", fill = "group") +
+    #       scale_x_discrete(drop = TRUE) +
+    #       
+    #       # Label inside stacks (optional, as you already had)
+    #       geom_text(
+    #         aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+    #         position = position_stack(vjust = 0.5),
+    #         color = "black"
+    #       ) +
+    #       
+    #       # Add total label at top of each bar
+    #       geom_text(
+    #         data = function(df) df %>%
+    #           group_by(Degree) %>%
+    #           summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+    #         aes(x = Degree, y = 105, label = total_label),  # x=100 since perc is on x-axis
+    #         inherit.aes = FALSE,
+    #         vjust = 0.5
+    #       ) +
+    #       scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) +
+    #       ylim(0,115)
+    #     
+    #   
+    #   } else {
+        URM_df = data %>%
+          select(Degree, Total, URM) %>%
+          mutate(`Not URM` = Total - URM) %>%
+          pivot_longer(c("Not URM", "URM"), names_to = "group", values_to = "total") %>%
+          ungroup()
+        
+        urm_length <- nrow(URM_df)
+        
+        if (urm_length > 4) {
+          
+          
+          # Jaqueline Tuesday
+          # if ((!input$collegeYN) | input$collegeYN) {
+          #   
+            URM_plot <- URM_df %>%
+              mutate(perc = round(100 * total / Total, 1),
+                     Degree = reorder(Degree, Total)) %>%
+              ggplot(aes(y = Degree, x = perc, fill = factor(group))) +
+              geom_col() +
+              theme_minimal() +
+              theme(axis.title.y = element_blank(),
+                    axis.text.y = element_text(size = 10),
+                    axis.text.x = element_text(size = 10),
+                    legend.text = element_text(size = 10),
+                    legend.title = element_text(size = 10)) +
+              labs(x = "Total", fill = "group") +
+              scale_y_discrete(drop = TRUE) +
+              
+              # Label inside stacks (optional, as you already had)
+              geom_text(
+                aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+                position = position_stack(vjust = 0.5),
+                color = "black"
+              ) +
+              
+              # Add total label at top of each bar
+              geom_text(
+                data = function(df) df %>%
+                  group_by(Degree) %>%
+                  summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+                aes(y = Degree, x = 108, label = total_label),  # x=100 since perc is on x-axis
+                inherit.aes = FALSE,
+                vjust = 0.5
+              ) +
+              scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) +
+              xlim(0,115)
+            
+            if (input$majorYN) {
+              URM_plot + theme(legend.position = "right", legend.justification = "top")
+            } else {
+              URM_plot
+            }
+        # URM_df %>%
+        #   ungroup() %>%
+        #   mutate(perc = round(100*total/Total, 1)) %>%
+        #   ggplot(aes(y=Degree, x=perc, fill=(factor(group, levels = c("URM", "Not URM"), ordered = TRUE)))) +
+        #   geom_col() +
+        #   theme_minimal() +
+        #   theme(axis.title.y = element_blank()) +
+        #   labs(x = "Total",
+        #        fill = "group") + 
+        #   scale_y_discrete(drop = TRUE) +
+        #   geom_text(
+        #     aes(label = ifelse(perc >= 5.0, paste0(perc, "%"), "")),
+        #     position = position_stack(vjust = 0.5),
+        #     hjust = 0.5,
+        #     color = "black"
+        #   ) + 
+        #   scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) 
+          # } else {
+          #   URM_df %>%
+          #     mutate(perc = round(100 * total / Total, 1),
+          #            Degree = reorder(Degree, -Total)) %>%
+          #     ggplot(aes(x = Degree, y = perc, fill = factor(group))) +
+          #     geom_col() +
+          #     theme_minimal() +
+          #     theme(axis.title.x = element_blank(),
+          #           axis.text.y = element_text(size = 10),
+          #           axis.text.x = element_text(size = 10),
+          #           legend.text = element_text(size = 10),
+          #           legend.title = element_text(size = 10)) +
+          #     labs(y = "Total", fill = "group") +
+          #     scale_x_discrete(drop = TRUE) +
+          #     
+          #     # Label inside stacks (optional, as you already had)
+          #     geom_text(
+          #       aes(label = ifelse(perc > 50.0, paste0(perc, "%"), "")),
+          #       position = position_stack(vjust = 0.5),
+          #       color = "black"
+          #     ) +
+          #     
+          #     # Add total label at top of each bar
+          #     geom_text(
+          #       data = function(df) df %>%
+          #         group_by(Degree) %>%
+          #         summarise(total_label = paste0("",scales::comma(sum(total))), .groups = "drop"),
+          #       aes(x = Degree, y = 105, label = total_label),  # x=100 since perc is on x-axis
+          #       inherit.aes = FALSE,
+          #       vjust = 0.5
+          #     ) +
+          #     scale_fill_manual("", values = (c("mediumpurple", "lightgreen"))) +
+          #     ylim(0,115)
+          # }
       #guides(x =  guide_axis(angle = -90)) 
       
       # BOOKMARK JAQUELINE
-      
+          
     } else {
       # Step 1: Add percentage column to each subset
       URM_df <- URM_df %>%
