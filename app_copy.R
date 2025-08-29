@@ -236,13 +236,13 @@ server <- function(input, output, session) {
       
       plot_height <- if ((n_groups > 10 & !input$collegeYN)) {
         paste0(40 + (n_groups - 10) * 3, "vh")  # grow height with groups
-      } else if (input$conc | input$degreeYN) {
+      } else if (input$conc | (!is.null(input$degreeYN) && input$degreeYN)) {
         paste0(40 + (n_groups - 1) * 20, "vh")  # grow height with groups
       } else {
         "25vh"  # default
       }
       
-      if (input$conc | input$degreeYN) {
+      if (input$conc | (!is.null(input$degreeYN) && input$degreeYN)) {
         # Show race and URM side-by-side
         fluidRow(
           column(12,
@@ -371,36 +371,37 @@ server <- function(input, output, session) {
     read_filter <- function(file) {
       df <- readRDS(file)
       
+      df <- df %>%
+        filter(Coll %in% input$college,
+               `Major Name` %in% input$major,
+               programtype %in% input$level) %>%
+        group_by(`Major Name`, `Major code`) 
+      
       if (!is.null(input$degree) && input$degree != "") {
         df <- df %>%
           filter(Coll %in% input$college,
                  `Major Name` %in% input$major,
                  programtype %in% input$level,
                  Degree %in% input$degree) %>%
-          group_by(`Major Name`, `Major code`) 
-      } 
-      
-      if (input$conc) {
-        df <- df %>%
-          filter(Coll %in% input$college,
-                 `Major Name` %in% input$major,
-                 programtype %in% input$level) %>%
-          group_by(`Major Name`, `Major code`, `Concentration Name (if any)`) 
-      } else {
-        df <- df %>%
-          filter(Coll %in% input$college,
-                 `Major Name` %in% input$major,
-                 programtype %in% input$level) %>%
-          group_by(`Major Name`, `Major code`) 
+          group_by(`Major Name`, `Major code`)
       }
-      
-      if (input$degreeYN) {
+
+      if (!is.null(input$conc) && input$conc) {
         df <- df %>%
           filter(Coll %in% input$college,
                  `Major Name` %in% input$major,
                  programtype %in% input$level) %>%
-          group_by(`Major Name`, `Major code`, Degree) 
-      } 
+          group_by(`Major Name`, `Major code`, `Concentration Name (if any)`)
+      }
+
+
+      if (!is.null(input$degreeYN) && input$degreeYN) {
+        df <- df %>%
+          filter(Coll %in% input$college,
+                 `Major Name` %in% input$major,
+                 programtype %in% input$level) %>%
+          group_by(`Major Name`, `Major code`, Degree)
+      }
       
       df %>%
       #  group_by(`Major Name`, `Major code`) %>%
@@ -437,20 +438,24 @@ server <- function(input, output, session) {
         "su" = "#9d7b68",    
         "sp" = "#a0522d",  
         "fa" = "#514420"
-      )) 
+      )) + 
+          theme(axis.text.y = element_text(size = 12),
+                axis.text.x = element_text(size = 15),
+                legend.text = element_text(size = 12),
+                legend.title = element_text(size = 12))
     
     if (input$conc) {
-      conc_orders <- all_data %>% 
+      conc_orders <- all_data %>%
         group_by(`Concentration Name (if any)`) %>%
         summarise(conc_n = sum(Total)) %>%
         arrange(desc(conc_n)) %>%
         pull(`Concentration Name (if any)`)
-      
+
       TSplot +
        # Major_total
         labs(title = "Enrollment over Time by Major concentration", x = "Fiscal Year", y = "Enrollment") +
         facet_wrap(~ factor(`Concentration Name (if any)`, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
-        theme(legend.position = "right", legend.justification = "top", 
+        theme(legend.position = "right", legend.justification = "top",
               strip.text.x = element_text(size = 15),
               axis.text.y = element_text(size = 12),
               axis.text.x = element_text(size = 15),
@@ -458,18 +463,18 @@ server <- function(input, output, session) {
               legend.title = element_text(size = 12),
               axis.title = element_text(size = 13),
               strip.background = element_rect(fill = "lightgray", color = NA))
-    } else if (input$degreeYN) {
-      conc_orders <- all_data %>% 
+    } else if (!is.null(input$degreeYN) && input$degreeYN) {
+      conc_orders <- all_data %>%
         group_by(Degree) %>%
         summarise(conc_n = sum(Total)) %>%
         arrange(desc(conc_n)) %>%
         pull(Degree)
-      
+
       TSplot +
         # Major_total
         labs(title = "Enrollment over Time by Degree", x = "Fiscal Year", y = "Enrollment") +
         facet_wrap(~ factor(Degree, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
-        theme(legend.position = "right", legend.justification = "top", 
+        theme(legend.position = "right", legend.justification = "top",
               strip.text.x = element_text(size = 15),
               axis.text.y = element_text(size = 12),
               axis.text.x = element_text(size = 15),
@@ -478,12 +483,7 @@ server <- function(input, output, session) {
               axis.title = element_text(size = 13),
               strip.background = element_rect(fill = "lightgray", color = NA))
     } else {
-      TSplot +
-        theme(axis.text.y = element_text(size = 12),
-              axis.text.x = element_text(size = 15),
-              legend.text = element_text(size = 12),
-              legend.title = element_text(size = 12))
-        
+      TSplot
     }
     
   })
@@ -712,7 +712,7 @@ server <- function(input, output, session) {
     } else {
       output$degree_type_ui <- renderUI({ NULL })
       
-      updateSelectInput(session, "degree", choices = "", selected = "")
+      updateSelectInput(session, "degree", choices = "", selected = NULL)
       updateCheckboxInput(session, "degreeYN", value = FALSE)
     }
     
@@ -856,8 +856,8 @@ server <- function(input, output, session) {
   
   # by degree 
   prevDegree    <- reactiveVal("")
-  
-  observeEvent(list(input$degree, input$degreeYN), {
+  prevDegreeYN    <- reactiveVal(FALSE)
+  observeEvent(list(input$degree, input$degreeYN, input$conc), {
     
     # if (!is.null(input$degree) && input$degree != "") {
     #   
@@ -865,23 +865,31 @@ server <- function(input, output, session) {
     deg    <- input$degree
     deg_chk    <- input$degreeYN
     oldDegree <- prevDegree()
+    oldDegreeYN <- prevDegreeYN()
     
-    # 1) If the user just went from non-empty -> empty checkbox, clear the level
-    if (oldDegree == "" & deg != "" & deg_chk) {
+    if (oldDegreeYN & (!is.null(input$conc) & input$conc)) {
+      # friday edits
       updateCheckboxInput(session, "degreeYN", value = FALSE)
-    } else if (deg_chk & (deg != "")) {
+    }
+    # 1) If the user just went from non-empty -> empty checkbox, clear the level
+    if (oldDegree == "" & deg != "" & deg_chk & is.null(input$conc) ) {
+      updateCheckboxInput(session, "degreeYN", value = FALSE)
+    } else if (deg_chk & (deg != "") & is.null(input$conc) ) {
       updateSelectizeInput(session, "degree", selected = "")
       updateCheckboxInput(session, "conc", value = FALSE)
       
-    } else if (deg_chk) {
+    } else if (deg_chk & is.null(input$conc) ) {
       updateCheckboxInput(session, "conc", value = FALSE)
     }
     
+
     
+    prevDegreeYN(deg_chk)
     prevDegree(deg)
     
   }, ignoreInit = TRUE)
   
+
   
   
 
