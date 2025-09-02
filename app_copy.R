@@ -649,22 +649,32 @@ server <- function(input, output, session) {
 
     # Filter the data
     filtered_concs_df <- enrollment_data() %>%
+     # data %>%
         filter(Coll == input$college,
                programtype == input$level,
-               `Major Name` == input$major)
-    
-    if (!is.null(input$degree) && input$degree != "") {
-      filtered_concs <- filtered_concs_df %>%
-        filter(Degree == input$degree) %>%
-        pull(`Concentration Name (if any)`) #%>%
-    } else {
-      filtered_concs <- filtered_concs_df %>%
-        pull(`Concentration Name (if any)`)
+               `Major Name` == input$major) %>%
+      pull(`Concentration Name (if any)`) %>%
+      unique()
+    if (length(as.vector(filtered_concs_df)) > 1) {
+      if (!is.null(input$degree)) {
+        
+        if (input$degree != "") {
+          updateCheckboxInput(session, "conc", value = FALSE)
+          
+          showElement("conc")
+        } else {
+          hideElement("conc")
+        }
+        
+        
+      } else {
+        showElement("conc")
+      }
     }
     
-    updateCheckboxInput(session, "conc", value = FALSE)
     
-    showElement("conc")
+    
+    
     # if (length(as.vector(filtered_concs)) > 1) {
     #   # Set dropdown choices
     #   conc_choices <- c("Show all concentrations" = "", as.vector(filtered_concs))
