@@ -34,12 +34,12 @@ college_abb_newest = list(KL="ACES", KM="Gies", KN ="Education", KP="Grainger", 
                           KV = "LAS", KW = "DGS", KY="AHS", LC="Vet Med", LG="LER", LL="Social Work", LN="CITL", LP="iSchool", LT="Carle Illinois", NB = "Provost")
 input = data.frame(level = "Undergraduate",
                    college = "KV",
-                   major = "Statistics",
+                   major = "Mathematics",
                    degree = "",
                    levelYN = F,
                    collegeYN = F,
                    majorYN = F,
-                   conc = F,
+                   conc = T,
                    degreeYN = F,
                    semester = "Spring",
                    year = 2004)
@@ -648,39 +648,33 @@ server <- function(input, output, session) {
     req(input$college != "", input$level != "", input$major != "")
 
     # Filter the data
+    filtered_concs_df <- enrollment_data() %>%
+        filter(Coll == input$college,
+               programtype == input$level,
+               `Major Name` == input$major)
+    
     if (!is.null(input$degree) && input$degree != "") {
-      filtered_concs <- enrollment_data() %>%
-        filter(Coll == input$college,
-               programtype == input$level,
-               `Major Name` == input$major,
-               Degree == input$degree) %>%
-        select(`Concentration Name (if any)`) %>%
-        na.omit() %>%
-        distinct() %>%
-        arrange(`Concentration Name (if any)`) %>%
-        pull()
+      filtered_concs <- filtered_concs_df %>%
+        filter(Degree == input$degree) %>%
+        pull(`Concentration Name (if any)`) #%>%
     } else {
-      filtered_concs <- enrollment_data() %>%
-        filter(Coll == input$college,
-               programtype == input$level,
-               `Major Name` == input$major) %>%
-        select(`Concentration Name (if any)`) %>%
-        na.omit() %>%
-        distinct() %>%
-        arrange(`Concentration Name (if any)`) %>%
-        pull()
+      filtered_concs <- filtered_concs_df %>%
+        pull(`Concentration Name (if any)`)
     }
     
-    if (length(as.vector(filtered_concs)) > 1) {
-      # Set dropdown choices
-      conc_choices <- c("Show all concentrations" = "", as.vector(filtered_concs))
-      
-      updateCheckboxInput(session, "conc", value = FALSE)
-      
-      showElement("conc")
-    } else {
-      hideElement("conc")
-    }
+    updateCheckboxInput(session, "conc", value = FALSE)
+    
+    showElement("conc")
+    # if (length(as.vector(filtered_concs)) > 1) {
+    #   # Set dropdown choices
+    #   conc_choices <- c("Show all concentrations" = "", as.vector(filtered_concs))
+    #   
+    #   updateCheckboxInput(session, "conc", value = FALSE)
+    #   
+    #   showElement("conc")
+    # } else {
+    #   hideElement("conc")
+    # }
 
 
   })
@@ -856,42 +850,31 @@ server <- function(input, output, session) {
   
   # by degree 
   prevDegree    <- reactiveVal("")
-  prevDegreeYN    <- reactiveVal(FALSE)
   observeEvent(list(input$degree, input$degreeYN, input$conc), {
+  req(!is.null(input$degreeYN))
     
-    # if (!is.null(input$degree) && input$degree != "") {
-    #   
-    # }
     deg    <- input$degree
     deg_chk    <- input$degreeYN
     oldDegree <- prevDegree()
-    oldDegreeYN <- prevDegreeYN()
     
-    if (oldDegreeYN & (!is.null(input$conc) & input$conc)) {
-      # friday edits
-      updateCheckboxInput(session, "degreeYN", value = FALSE)
-    }
     # 1) If the user just went from non-empty -> empty checkbox, clear the level
-    if (oldDegree == "" & deg != "" & deg_chk & is.null(input$conc) ) {
+    if (oldDegree == "" & deg != "" & deg_chk  ) {
       updateCheckboxInput(session, "degreeYN", value = FALSE)
-    } else if (deg_chk & (deg != "") & is.null(input$conc) ) {
+    } else if (deg_chk & (deg != "") ) {
       updateSelectizeInput(session, "degree", selected = "")
       updateCheckboxInput(session, "conc", value = FALSE)
       
-    } else if (deg_chk & is.null(input$conc) ) {
-      updateCheckboxInput(session, "conc", value = FALSE)
+    } 
+    
+    if (deg_chk & (input$conc) ) {
+      updateCheckboxInput(session, "degreeYN", value = FALSE)
     }
     
-
-    
-    prevDegreeYN(deg_chk)
     prevDegree(deg)
     
   }, ignoreInit = TRUE)
   
 
-  
-  
 
   final_data <- reactive({
     
