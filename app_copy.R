@@ -450,19 +450,52 @@ server <- function(input, output, session) {
         summarise(conc_n = sum(Total)) %>%
         arrange(desc(conc_n)) %>%
         pull(`Concentration Name (if any)`)
+      
+      if (length(conc_orders) > 2) {
+        
+        ## insert grid.arrange
+        
+       conc_list <- split(all_data, all_data$`Concentration Name (if any)`)
+        
+        plot_list <- lapply(conc_list, function(df) {
+          df %>%
+            mutate(Year = paste0("'", Year),
+                   Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE)) %>%
+            ggplot(aes(x = Year, y = Total, fill = Semester)) +
+            geom_col() +
+            theme_minimal() +
+            # Major_total
+            labs(title = paste(unique(df$`Major Name`), "Major concentration:", unique(df$`Concentration Name (if any)`)), x = "Fiscal Year", y = "Enrollment") +
+            theme(legend.position = "right", legend.justification = "top",
+                  strip.text.x = element_text(size = 15),
+                  axis.text.y = element_text(size = 12),
+                  axis.text.x = element_text(size = 15),
+                  legend.text = element_text(size = 12),
+                  legend.title = element_text(size = 12),
+                  axis.title = element_text(size = 13),
+                  strip.background = element_rect(fill = "lightgray", color = NA))
+        })
+        
+        # Step 3: Arrange plots
+        grid.arrange(grobs = plot_list, ncol = 1)
+        
+        
+      } else {
+        TSplot +
+          # Major_total
+          labs(title = "Enrollment over Time by Major concentration", x = "Fiscal Year", y = "Enrollment") +
+          facet_wrap(~ factor(`Concentration Name (if any)`, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
+          theme(legend.position = "right", legend.justification = "top",
+                strip.text.x = element_text(size = 15),
+                axis.text.y = element_text(size = 12),
+                axis.text.x = element_text(size = 15),
+                legend.text = element_text(size = 12),
+                legend.title = element_text(size = 12),
+                axis.title = element_text(size = 13),
+                strip.background = element_rect(fill = "lightgray", color = NA))
+      }
 
-      TSplot +
-       # Major_total
-        labs(title = "Enrollment over Time by Major concentration", x = "Fiscal Year", y = "Enrollment") +
-        facet_wrap(~ factor(`Concentration Name (if any)`, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
-        theme(legend.position = "right", legend.justification = "top",
-              strip.text.x = element_text(size = 15),
-              axis.text.y = element_text(size = 12),
-              axis.text.x = element_text(size = 15),
-              legend.text = element_text(size = 12),
-              legend.title = element_text(size = 12),
-              axis.title = element_text(size = 13),
-              strip.background = element_rect(fill = "lightgray", color = NA))
+      
     } else if (!is.null(input$degreeYN) && input$degreeYN) {
       conc_orders <- all_data %>%
         group_by(Degree) %>%
