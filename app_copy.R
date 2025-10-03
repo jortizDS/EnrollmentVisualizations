@@ -26,23 +26,24 @@ colleges_df <- df %>%
 
 colleges_vec <- setNames(colleges_df$Coll, colleges_df$`Major Name`)
 
-#college_abb_newest = list(KL="ACES", KM="BUS", KN ="EDUC", KP="ENGR", KR="FAA", KS = "Grad", KT = "MDIA", KU = "LAW", 
-#     KV = "LAS", KW = "DGS", KY="AHS", LC="VETMED", LG="LER", LL="SOCW", LN="CITL", LP="IS", LT="CIMED", NB = "Provost")#,
-#     LE = "Aviation")
+college_abb_newest = list(KL="ACES", KM="BUS", KN ="EDUC", KP="ENGR", KR="FAA", KS = "Grad", KT = "MDIA", KU = "LAW",
+    KV = "LAS", KW = "DGS", KY="AHS", LC="VETMED", LG="LER", LL="SOCW", LN="CITL", LP="IS", LT="CIMED", NB = "Provost",
+    LE = "Aviation")
 
-college_abb_newest = list(KL="ACES", KM="Gies", KN ="Education", KP="Grainger", KR="FAA", KS = "Graduate", KT = "Media", KU = "Law", 
-                          KV = "LAS", KW = "DGS", KY="AHS", LC="Vet Med", LG="LER", LL="Social Work", LN="CITL", LP="iSchool", LT="Carle Illinois", NB = "Provost")
-input = data.frame(level = "Undergraduate",
+# college_abb_newest = list(KL="ACES", KM="Gies", KN ="Education", KP="Grainger", KR="FAA", KS = "Graduate", KT = "Media", KU = "Law", 
+#                           KV = "LAS", KW = "DGS", KY="AHS", LC="Vet Med", LG="LER", LL="Social Work", LN="CITL", LP="iSchool", LT="Carle Illinois", NB = "Provost")
+
+input = data.frame(level = "Graduate",
                    college = "KV",
-                   major = "Mathematics",
+                   major = "Statistics",
                    degree = "",
                    levelYN = F,
                    collegeYN = F,
                    majorYN = F,
-                   conc = T,
+                   conc = F,
                    degreeYN = F,
-                   semester = "Spring",
-                   year = 2004)
+                   semester = "Fall",
+                   year = 2018)
 
 # code ----
 ui <- fluidPage(
@@ -132,19 +133,19 @@ ui <- fluidPage(
            ),
            
            uiOutput("race_urm_ui"),
-           uiOutput("timeseries_ui"),
+           uiOutput("timeseries_ui") # ,
           # plotOutput("timeSeriesPlot"),
            
            
-           # Row 3: Data Table
-           fluidRow(
-             column(12,
-                    h3("View Data"),
-                    shinycssloaders::withSpinner(
-                      DT::dataTableOutput("mytable"),
-                      type = 4, color = "#007bff", size = 0.5)
-             )
-           )
+           # # Row 3: Data Table
+           # fluidRow(
+           #   column(12,
+           #          h3("View Data"),
+           #          shinycssloaders::withSpinner(
+           #            DT::dataTableOutput("mytable"),
+           #            type = 4, color = "#007bff", size = 0.5)
+           #   )
+           # )
     )
     
   )
@@ -158,7 +159,7 @@ server <- function(input, output, session) {
     updateSelectInput(session, "year", selected = "2025")         # or default year
     updateSelectInput(session, "semester", selected = "Spring")   # or default semester
     
-    updateSelectInput(session, "degree", selected = "")
+    updateSelectInput(session, "degree", selected = NULL)
     updateSelectInput(session, "college", selected = "")
     updateSelectInput(session, "level", selected = "")
     updateSelectInput(session, "major", selected = "")
@@ -407,7 +408,13 @@ server <- function(input, output, session) {
       #  group_by(`Major Name`, `Major code`) %>%
         summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "keep") %>%
         mutate(Semester = str_extract(basename(file), "(fa|sp|su)"),
-               Year = str_extract(basename(file), "\\d{2}"))
+               Year = str_extract(basename(file), "\\d{2}")) %>%
+        ungroup() %>%
+        select(any_of(c("Major Name", "Major code", "Total", "Year", "Semester", "Degree", "Concentration Name (if any)"))) %>%
+        ungroup() %>%
+        mutate(FiscalYear = ifelse(Semester == "fa", as.numeric((Year))+ 1, as.numeric(Year))) %>%
+        mutate(FY = paste0("'", dataRetrieval::zeroPad(FiscalYear, padTo = 2 )),
+               Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE))
     }
     
     all_data <- purrr::map_dfr(files, read_filter)
@@ -426,46 +433,70 @@ server <- function(input, output, session) {
     # ))
     
     #############
+    
     TSplot <- all_data %>%
-      #filter() %>%
-      mutate(Year = paste0("'", Year),
-             Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE)) %>%
-      ggplot(aes(x = Year, y = Total, fill = Semester)) +
+      ggplot(aes(x = FY, y = Total, fill = Semester)) +
       geom_col() +
       theme_minimal() +
-      labs(title = "Major Enrollment over Time", x = "Fiscal Year", y = "Enrollment") +
-      scale_fill_manual(values = c(
-        "su" = "#9d7b68",    
-        "sp" = "#a0522d",  
-        "fa" = "#514420"
-      )) + 
+      labs(title = "Major Enrollment over Time", x = "Fiscal Year", y = "Enrollment",
+           subtitle = "Please note: Fall semesters are shown under the next Fiscal Year e.g. Fall 2024 appears in FY25") + 
           theme(axis.text.y = element_text(size = 12),
                 axis.text.x = element_text(size = 15),
                 legend.text = element_text(size = 12),
-                legend.title = element_text(size = 12))
+                legend.title = element_text(size = 12)) 
+     
     
     if (input$conc) {
       conc_orders <- all_data %>%
-        group_by(`Concentration Name (if any)`) %>%
-        summarise(conc_n = sum(Total)) %>%
-        arrange(desc(conc_n)) %>%
+        #conc_list[[1]] %>%
+        filter(Semester ==  ifelse(input$semester == "Fall", "fa", 
+             ifelse(input$semester == "Spring", "sp", 
+                    ifelse(input$semester == "Summer", "su", NA)))) %>%
+        filter(Year == substr(input$year, 3, 4)) %>%
+        arrange(desc(Total)) %>%
         pull(`Concentration Name (if any)`)
       
-      if (length(conc_orders) > 2) {
+      if (length(conc_orders) > 1) {
         
         ## insert grid.arrange
+        all_data$`Concentration Name (if any)` = factor(all_data$`Concentration Name (if any)`, levels = (conc_orders), ordered = T)
         
        conc_list <- split(all_data, all_data$`Concentration Name (if any)`)
         
+       min_max = sort(unique(all_data$Year))
         plot_list <- lapply(conc_list, function(df) {
-          df %>%
-            mutate(Year = paste0("'", Year),
-                   Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE)) %>%
-            ggplot(aes(x = Year, y = Total, fill = Semester)) +
+        # conc_list[[6]] %>% 
+          #ungroup() %>%
+          #df = df %>%
+           # mutate(FYear = as.numeric(paste0("20", substr(Year, 2, 3))),
+            #       Semester = factor(Semester, levels = rev(c("fa", "sp", "su")), ordered = TRUE)) 
+          
+          missing_years =  min_max[!(min_max %in% df$Year)]
+          
+          OG_copy <- df[1,] %>% mutate(Year  = NA, Semester = "sp",
+                                                   FiscalYear = NA, FY = NA,
+                                                   Total = 0)
+          
+          
+          
+          if (length(missing_years) > 0) {
+            df = bind_rows(lapply(1:length(missing_years), function(x) {
+              OG_copy_x = OG_copy  %>%
+                mutate(Year  = as.character(missing_years[x]),
+                       FY = paste0("'", as.character(missing_years[x])))
+              OG_copy_x
+            })%>% bind_rows(), df)
+          }
+          
+          #conc_list[[2]] %>%
+         df %>%
+            ggplot(aes(x = FY, y = Total, fill = Semester)) +
             geom_col() +
             theme_minimal() +
             # Major_total
-            labs(title = paste(unique(df$`Major Name`), "Major concentration:", unique(df$`Concentration Name (if any)`)), x = "Fiscal Year", y = "Enrollment") +
+            labs(title = paste(unique(df$`Major Name`), "Major concentration:", unique(df$`Concentration Name (if any)`)), 
+                 x = "Fiscal Year", y = "Enrollment",
+                 subtitle = "Please note: Fall semesters are shown under the next Fiscal Year e.g. Fall 2024 appears in FY25") +
             theme(legend.position = "right", legend.justification = "top",
                   strip.text.x = element_text(size = 15),
                   axis.text.y = element_text(size = 12),
@@ -473,7 +504,21 @@ server <- function(input, output, session) {
                   legend.text = element_text(size = 12),
                   legend.title = element_text(size = 12),
                   axis.title = element_text(size = 13),
-                  strip.background = element_rect(fill = "lightgray", color = NA))
+                  strip.background = element_rect(fill = "lightgray", color = NA)) +
+           # xlim(((min_max[1]-1)), min_max[2]+1)  +
+            geom_text(
+              data = df %>%
+                dplyr::group_by(FY) %>%
+                dplyr::mutate(TotalBar = sum(Total), .groups = "drop"),
+              aes(x = FY, y = TotalBar, 
+                  label = ifelse(substr(input$year, 3, 4) == (Year) & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), 
+                                 paste0(toupper(substr(input$semester, 1, 2)), Year, ": \n", Total), NA)),
+              inherit.aes = FALSE,   # <-- important
+              vjust = -0.5, size = 3
+            )
+            # geom_text(aes(label = ifelse(input$year == FYear & 
+            #                                grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), paste0(toupper(Semester), ": \n", Total), NA)), 
+            #           vjust = -.5, size = 3)
         })
         
         # Step 3: Arrange plots
@@ -483,7 +528,8 @@ server <- function(input, output, session) {
       } else {
         TSplot +
           # Major_total
-          labs(title = "Enrollment over Time by Major concentration", x = "Fiscal Year", y = "Enrollment") +
+          labs(title = "Enrollment over Time by Major concentration", x = "Fiscal Year", y = "Enrollment",
+               subtitle = "Please note: Fall semesters are shown under the next Fiscal Year e.g. Fall 2024 appears in FY25") +
           facet_wrap(~ factor(`Concentration Name (if any)`, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
           theme(legend.position = "right", legend.justification = "top",
                 strip.text.x = element_text(size = 15),
@@ -492,31 +538,141 @@ server <- function(input, output, session) {
                 legend.text = element_text(size = 12),
                 legend.title = element_text(size = 12),
                 axis.title = element_text(size = 13),
-                strip.background = element_rect(fill = "lightgray", color = NA))
+                strip.background = element_rect(fill = "lightgray", color = NA)) +
+          geom_text(
+            data = df %>%
+              dplyr::group_by(FY) %>%
+              dplyr::mutate(TotalBar = sum(Total), .groups = "drop"),
+            aes(x = FY, y = TotalBar, 
+                label = ifelse(substr(input$year, 3, 4) == Year & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), 
+                               paste0(toupper(substr(input$semester, 1, 2)), Year, ": \n", Total), NA)),
+            inherit.aes = FALSE,   # <-- important
+            vjust = -0.5, size = 3
+          )
+          #geom_text(aes(label = ifelse(substr(input$year, 3, 4) == substr(Year, 2,3 ) & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), paste0(toupper(Semester), ": \n", Total), NA)), vjust = -0.2, size = 3)
       }
 
       
-    } else if (!is.null(input$degreeYN) && input$degreeYN) {
-      conc_orders <- all_data %>%
-        group_by(Degree) %>%
-        summarise(conc_n = sum(Total)) %>%
-        arrange(desc(conc_n)) %>%
+    } 
+    else if (!is.null(input$degreeYN) && input$degreeYN) {
+      
+      degree_orders <- all_data %>%
+        #conc_list[[1]] %>%
+        filter(Semester ==  ifelse(input$semester == "Fall", "fa", 
+                                   ifelse(input$semester == "Spring", "sp", 
+                                          ifelse(input$semester == "Summer", "su", NA)))) %>%
+        filter(Year == substr(input$year, 3, 4)) %>%
+        arrange(desc(Total)) %>%
         pull(Degree)
+      
+      if (length(degree_orders) > 1) {
+        
+        ## insert grid.arrange
+        all_data$Degree = factor(all_data$Degree, levels = (degree_orders), ordered = T)
+        
+        degree_list <- split(all_data, all_data$Degree)
+        
+        deg_min_max = sort(unique(all_data$Year))
+        deg_plot_list <- lapply(degree_list, function(df) {
+         #degree_list[[1]] %>% 
+          
+          missing_years =  deg_min_max[!(deg_min_max %in% df$Year)]
+          
+          OG_copy <- df[1,] %>% mutate(Year  = NA, Semester = "sp",
+                                       FiscalYear = NA, FY = NA,
+                                       Total = 0)
+          
+          
+          
+          if (length(missing_years) > 0) {
+            df = bind_rows(lapply(1:length(missing_years), function(x) {
+              OG_copy_x = OG_copy  %>%
+                mutate(Year  = as.character(missing_years[x]),
+                       FY = paste0("'", as.character(missing_years[x])))
+              OG_copy_x
+            })%>% bind_rows(), df)
+          }
+          
+          
+          df %>%
+            ggplot(aes(x = FY, y = Total, fill = Semester)) +
+            geom_col() +
+            theme_minimal() +
+            # Major_total
+            labs(title = paste(input$level, unique(df$`Major Name`), "Program enrollment by Degree:", unique(df$Degree)), 
+                 x = "Fiscal Year", y = "Enrollment",
+                 subtitle = "Please note: Fall semesters are shown under the next Fiscal Year e.g. Fall 2024 appears in FY25") +
+            theme(legend.position = "right", legend.justification = "top",
+                  strip.text.x = element_text(size = 15),
+                  axis.text.y = element_text(size = 12),
+                  axis.text.x = element_text(size = 15),
+                  legend.text = element_text(size = 12),
+                  legend.title = element_text(size = 12),
+                  axis.title = element_text(size = 13),
+                  strip.background = element_rect(fill = "lightgray", color = NA)) +
+            geom_text(
+              data = df %>%
+                dplyr::group_by(FY) %>%
+                dplyr::mutate(TotalBar = sum(Total), .groups = "drop"),
+              aes(x = FY, y = TotalBar, 
+                  label = ifelse(substr(input$year, 3, 4) == Year & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), 
+                                 paste0(toupper(substr(input$semester, 1, 2)), Year, ": \n", Total), NA)),
+              inherit.aes = FALSE,   # <-- important
+              vjust = -0.5, size = 3
+            )
+            #geom_text(aes(label = ifelse(input$year == FYear & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), paste0(toupper(Semester), ": \n", Total), NA)), vjust = -0.2, size = 3)
+        })
+        
+        # Step 3: Arrange plots
+        grid.arrange(grobs = deg_plot_list, ncol = 1)
+        
+        
+      } else {
+        TSplot +
+          # Major_total
+          labs(title = "Enrollment over Time by Degree", x = "Fiscal Year", y = "Enrollment",
+               subtitle = "Please note: Fall semesters are shown under the next Fiscal Year e.g. Fall 2024 appears in FY25") +
+          facet_wrap(~ factor(Degree, levels = degree_orders, ordered = T), scales = "free_y", ncol = 1) +
+          theme(legend.position = "right", legend.justification = "top",
+                strip.text.x = element_text(size = 15),
+                axis.text.y = element_text(size = 12),
+                axis.text.x = element_text(size = 15),
+                legend.text = element_text(size = 12),
+                legend.title = element_text(size = 12),
+                axis.title = element_text(size = 13),
+                strip.background = element_rect(fill = "lightgray", color = NA)) +
+          geom_text(
+            data = all_data %>%
+              dplyr::group_by(Year) %>%
+              dplyr::mutate(TotalBar = sum(Total), .groups = "drop"),
+            aes(x = Year, y = TotalBar, 
+                label = ifelse(substr(input$year, 3, 4) == substr(Year, 2,3 ) & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), 
+                               paste0(toupper(substr(input$semester, 1, 2)), ": \n", Total), NA)),
+            inherit.aes = FALSE,   # <-- important
+            vjust = -0.5, size = 3
+          )
+        
+          #geom_text(aes(label = ifelse(substr(input$year, 3, 4) == substr(Year, 2,3 ) & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), paste0(toupper(Semester), ": \n", Total), NA)), vjust = -0.2, size = 3)
+        
+      }
 
-      TSplot +
-        # Major_total
-        labs(title = "Enrollment over Time by Degree", x = "Fiscal Year", y = "Enrollment") +
-        facet_wrap(~ factor(Degree, levels = conc_orders, ordered = T), scales = "free_y", ncol = 1) +
-        theme(legend.position = "right", legend.justification = "top",
-              strip.text.x = element_text(size = 15),
-              axis.text.y = element_text(size = 12),
-              axis.text.x = element_text(size = 15),
-              legend.text = element_text(size = 12),
-              legend.title = element_text(size = 12),
-              axis.title = element_text(size = 13),
-              strip.background = element_rect(fill = "lightgray", color = NA))
+     
     } else {
-      TSplot
+      TSplot +
+        geom_text(
+          data = all_data %>%
+            dplyr::group_by(FY) %>%
+            dplyr::mutate(TotalBar = sum(Total), .groups = "drop"),
+          aes(x = FY, y = TotalBar, 
+              label = ifelse(substr(input$year, 3, 4) == Year & grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), 
+                             paste0(toupper(substr(input$semester, 1, 2)), substr(input$year, 3, 4), ": \n", Total), NA)),
+          inherit.aes = FALSE,   # <-- important
+          vjust = -0.5, size = 3
+        )
+        
+        # geom_text(aes(label = ifelse(substr(input$year, 3, 4) == substr(Year, 2,3 ) & 
+        #                                grepl(substr(input$semester, 1, 2), Semester, ignore.case = T), 
+        #                              paste0(toupper(Semester), ": \n", Total), NA)), vjust = ifelse(input$semester == "Summer", -6, -4), size = 3)
     }
     
   })
@@ -775,16 +931,16 @@ server <- function(input, output, session) {
   })
   
   
-  output$mytable <- DT::renderDataTable({
-    DT::datatable(final_data(),
-                  extensions = 'Buttons',
-                  options = list(
-                    dom = 'Bfrtip',
-                    buttons = c('csv', 'excel'),
-                    scrollX = TRUE
-                  )
-    )
-  })
+  # output$mytable <- DT::renderDataTable({
+  #   DT::datatable(final_data(),
+  #                 extensions = 'Buttons',
+  #                 options = list(
+  #                   dom = 'Bfrtip',
+  #                   buttons = c('csv', 'excel'),
+  #                   scrollX = TRUE
+  #                 )
+  #   )
+  # })
   
   # observeEvent(input$level, {
   #   if (input$levelYN && input$level != "") {
@@ -1574,7 +1730,7 @@ server <- function(input, output, session) {
               axis.text.x = element_text(size = 10),
               legend.text = element_text(size = 10),
               legend.title = element_text(size = 10)) +
-        labs(y = "Total", fill = "residency") +
+        labs(y = "Total", fill = "Residency") +
         scale_x_discrete(drop = TRUE) +
         
         # Label inside stacks (optional, as you already had)
