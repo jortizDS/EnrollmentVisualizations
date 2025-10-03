@@ -5,16 +5,15 @@
 This project provides interactive visualizations and summaries of student enrollment data at the University of Illinois Urbana-Champaign (UIUC), filtered by semester, college, degree, major, and concentration. The goal is to help users explore enrollment trends across demographic dimensions such as race/ethnicity, sex, and residency for the following student enrollment statistics:
 
 1. Enrollment by Curriculum, Race, Sex, Residency - [**R Shiny app**](https://jortizds-uiuc-enrollment-by-curriculum-student.share.connect.posit.cloud/)
-2. New Freshman Demographics - [**Tableau Dashboard**](https://public.tableau.com/app/profile/jaqueline.ortiz2471/viz/UIUCFreshmenEnrollment/Overview)
+   - The data covers enrollment from Fall 2004 to Spring 2025, with key changes over time:
+     - In Summer 2010, a new race/ethnicity classification system was adopted.
+     - In Fall 2020, data on Underrepresented Minorities (URM) was introduced.
+   - These changes are reflected in the dashboard, which supports dynamic exploration across this full time range.
+3. New Freshman Demographics - [**Tableau Dashboard**](https://public.tableau.com/app/profile/jaqueline.ortiz2471/viz/UIUCFreshmenEnrollment/Overview)
+   - The data covers Freshmen enrollment from Fall 2017 to Fall 2024
 
 
-The data covers enrollment from Fall 2004 to Spring 2025, with key changes over time:
 
-- In Summer 2010, a new race/ethnicity classification system was adopted.
-
-- In Fall 2020, data on Underrepresented Minorities (URM) was introduced.
-
-These changes are reflected in the dashboard, which supports dynamic exploration across this full time range.
 
 ## Project Objective
 
